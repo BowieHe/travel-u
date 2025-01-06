@@ -2,7 +2,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 
 import TabNavigator from './tab-navigator';
-import Modal from '../screens/modal';
+// import Modal from '../screens/modal';
 
 export type RootStackParamList = {
   TabNavigator: undefined;
@@ -20,11 +20,11 @@ export default function RootStack() {
           component={TabNavigator}
           options={{ headerShown: false }}
         />
-        <Stack.Screen
+        {/* <Stack.Screen
           name="Modal"
           component={Modal}
           options={{ presentation: 'modal', headerLeft: () => null }}
-        />
+        /> */}
       </Stack.Navigator>
     </NavigationContainer>
   );

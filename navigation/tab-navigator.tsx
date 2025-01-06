@@ -24,8 +24,9 @@ export default function TabLayout({ navigation }: Props) {
         component={Home}
         options={{
           title: '计划',
+          headerShown: false,
           tabBarIcon: ({ color }) => <Entypo name="pin" size={24} color={color} />,
-          headerRight: () => <HeaderButton onPress={() => navigation.navigate('Modal')} />,
+          // headerRight: () => <HeaderButton onPress={() => navigation.navigate('Modal')} />,
         }}
       />
       <Tab.Screen
