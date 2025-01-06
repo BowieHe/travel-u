@@ -3,9 +3,11 @@ import { StackScreenProps } from '@react-navigation/stack';
 
 import { RootStackParamList } from '.';
 import { HeaderButton } from '../components/HeaderButton';
-import { TabBarIcon } from '../components/TabBarIcon';
-import One from '../screens/one';
-import Two from '../screens/two';
+import { Entypo, FontAwesome5, MaterialIcons } from '@expo/vector-icons';
+
+import Home from '../screens/home';
+import User from '../screens/user';
+import Add from '../screens/add';
 
 const Tab = createBottomTabNavigator();
 
@@ -18,20 +20,27 @@ export default function TabLayout({ navigation }: Props) {
         tabBarActiveTintColor: 'black',
       }}>
       <Tab.Screen
-        name="One"
-        component={One}
+        name="Home"
+        component={Home}
         options={{
-          title: 'Tab One',
-          tabBarIcon: ({ color }) => <TabBarIcon name="code" color={color} />,
+          title: '计划',
+          tabBarIcon: ({ color }) => <Entypo name="pin" size={24} color={color} />,
           headerRight: () => <HeaderButton onPress={() => navigation.navigate('Modal')} />,
         }}
       />
       <Tab.Screen
-        name="Two"
-        component={Two}
+        name="Add"
+        component={Add}
         options={{
-          title: 'Tab Two',
-          tabBarIcon: ({ color }) => <TabBarIcon name="code" color={color} />,
+          tabBarIcon: ({ color }) => <MaterialIcons name="add-box" size={24} color={color} />,
+        }}
+      />
+      <Tab.Screen
+        name="User"
+        component={User}
+        options={{
+          title: '我',
+          tabBarIcon: ({ color }) => <FontAwesome5 name="user-ninja" size={24} color={color} />,
         }}
       />
     </Tab.Navigator>
