@@ -33,6 +33,7 @@ export default function TabLayout({ navigation }: Props) {
         name="Add"
         component={Add}
         options={{
+          headerShown: false,
           tabBarIcon: ({ color }) => <MaterialIcons name="add-box" size={24} color={color} />,
         }}
       />
@@ -41,6 +42,7 @@ export default function TabLayout({ navigation }: Props) {
         component={User}
         options={{
           title: '我',
+          headerShown: false,
           tabBarIcon: ({ color }) => <FontAwesome5 name="user-ninja" size={24} color={color} />,
         }}
       />

@@ -15,6 +15,19 @@
         {
           "launchMode": "most-recent"
         }
+      ],
+      [
+        "@rnmapbox/maps",
+        {
+          "RNMapboxMapsDownloadToken": "sk.eyJ1IjoiYm93aWVlaG8iLCJhIjoiY201bWgyN3ZzMDA0ODJpczhjM3gxOWc1MSJ9.t7Xw8tNEYNjSEKYE7wSvbw",
+          "RNMapboxMapsVersion": "11.0.0"
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Show current location on map."
+        }
       ]
     ],
     "orientation": "portrait",
