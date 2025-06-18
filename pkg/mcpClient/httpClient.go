@@ -24,7 +24,7 @@ func NewHttpClient(url string) (*HttpClient, error) {
 	}
 
 	// Use NewBaseClient from the same package (or import if it were different)
-	base := NewBaseClient(*rawClient)
+	base := NewBaseClient(rawClient)
 
 	return &HttpClient{BaseClient: base}, nil
 }

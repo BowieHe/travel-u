@@ -1,0 +1,14 @@
+[
+    {
+        "name": "fetch",
+        "type": "stdio",
+        "command": "uvx",
+        "args": ["mcp-server-fetch"],
+    },
+
+    {
+        "name": "amap-amap-sse",
+        "type": "streamableHttp",
+        "baseUrl": "https://mcp.amap.com/sse?key=4e708f1bd914d87e91a366c66f76c651",
+    },
+]
