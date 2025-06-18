@@ -1,0 +1,15 @@
+{
+    "keep": {
+        "days": true,
+        "amount": 14
+    },
+    "auditLog": "/Users/bowie/Downloads/code/travel-u/logs/.30058a09480022d4bbe8005c22340d6b5606187c-audit.json",
+    "files": [
+        {
+            "date": 1750236461615,
+            "name": "/Users/bowie/Downloads/code/travel-u/logs/mcp-puppeteer-2025-06-18.log",
+            "hash": "3e27f18ddb92150ae078086556b767aa425af6f4d0a7818f116a43f40439eb2f"
+        }
+    ],
+    "hashType": "sha256"
+}
