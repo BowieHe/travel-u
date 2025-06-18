@@ -1,0 +1,14 @@
+[
+	{
+		"name": "puppeteer",
+		"type": "stdio",
+		"command": "npx",
+		"args": ["-y", "puppeteer-mcp-server"]
+	},
+
+	{
+		"name": "amap-amap-sse",
+		"type": "streamableHttp",
+		"baseUrl": "https://mcp.amap.com/sse?key=${AMAP_WEB_API}"
+	}
+]
