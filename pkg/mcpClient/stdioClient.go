@@ -23,7 +23,7 @@ func NewStdioClient(command string, args []string, serverName string) (*StdioCli
 		return nil, fmt.Errorf("failed to create StdioMCP client: %w", err)
 	}
 
-	base := NewBaseClient(*rawClient) // Corrected based on compiler error: rawClient is *client.Client, NewBaseClient expects client.Client
+	base := NewBaseClient(rawClient) // Corrected based on compiler error: rawClient is *client.Client, NewBaseClient expects client.Client
 
 	return &StdioClient{BaseClient: base}, nil
 }
