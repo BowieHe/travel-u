@@ -8,7 +8,10 @@ import (
 	"syscall"
 
 	"github.com/BowieHe/travel-u/internal/service"
+	// mc "github.com/BowieHe/travel-u/pkg/mcp-client"
+	lm "github.com/BowieHe/travel-u/pkg/mcp-client"
 	"github.com/BowieHe/travel-u/pkg/utils"
+	"github.com/mark3labs/mcp-go/mcp"
 )
 
 func main() {
@@ -29,14 +32,45 @@ func main() {
 
 	utils.LoadEnv() // 假设这个不需要 appCtx
 
-	// lmc.DemonstrateStdioClientUsage()
+	// lm.DemonstrateStdioClientUsage()
 
 	// 假设 service.GenClient 将被更新以接受 appCtx
 	// 如果 GenClient 返回一个需要关闭的客户端实例，您可能需要处理它
 	// 例如: client, err := service.GenClient(appCtx)
 	// if err != nil { log.Fatalf(...) }
 	// if client != nil && client.Closer != nil { defer client.Close() }
-	service.GenClient(appCtx) // 修改这里以传递 appCtx
+
+	// mc.DemonstrateStdioClientUsage()
+	// mc.DemonstrateSseClientUsage()
+	// service.GenClient(appCtx) // 修改这里以传递 appCtx
+	servers := service.GenServer()
+	for _, server := range servers {
+		if *server.Type == "sse" {
+			log.Println("init sse")
+			c := lm.NewResilientSSEClient(server)
+			c.CallTool(appCtx, mcp.CallToolRequest{ // Pass appCtx
+				Params: mcp.CallToolParams{
+					Name: "hello_world",
+					Arguments: map[string]interface{}{
+						"name": "World",
+					},
+				},
+			})
+		} else if *server.Type == "stdio" {
+			log.Println("init stdio")
+			c := lm.NewResilientStdioClient(server)
+			c.CallTool(appCtx, mcp.CallToolRequest{
+				Params: mcp.CallToolParams{
+					Name: "hello_world",
+					Arguments: map[string]interface{}{
+						"name": "World",
+					},
+				},
+			})
+		} else {
+			log.Println("others")
+		}
+	}
 
 	log.Println("应用正在运行。按 CTRL+C 退出。")
 

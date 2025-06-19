@@ -60,11 +60,16 @@ func NewMCPClientFromConfig(ctx context.Context, serverConfig localmcp.MCPServer
 		// Note: NewStdioClient expects serverName as the third argument.
 		// We'll use serverConfig.Name for this.
 		return NewStdioClient(ctx, *serverConfig.Command, serverConfig.Args, serverConfig.Name)
-	case "streamableHttp":
+	case "http":
 		if serverConfig.BaseURL == nil {
 			return nil, fmt.Errorf("baseURL is missing for streamableHttp server: %s", serverConfig.Name)
 		}
 		return NewHttpClient(ctx, *serverConfig.BaseURL)
+	case "sse":
+		if serverConfig.BaseURL == nil {
+			return nil, fmt.Errorf("baseURL is missing for streamableHttp server: %s", serverConfig.Name)
+		}
+		return NewSseClient(ctx, *serverConfig.BaseURL, serverConfig.Name, serverConfig.Headers)
 	default:
 		return nil, fmt.Errorf("unsupported MCP server type: %s for server: %s", *serverConfig.Type, serverConfig.Name)
 	}

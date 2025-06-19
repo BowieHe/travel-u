@@ -14,41 +14,48 @@ import (
 	lm "github.com/BowieHe/travel-u/pkg/mcp"
 )
 
-type ResilientStdioClient struct {
-	command              string
-	args                 []string
+type ResilientSSEClient struct {
+	baseURL              string
+	headers              map[string]string
 	client               *client.Client
 	ctx                  context.Context
 	cancel               context.CancelFunc
-	restartCh            chan struct{}
+	reconnectCh          chan struct{}
 	mutex                sync.RWMutex
 	name                 string
 	notificationChan     chan mcp.Notification
 	notificationChanOnce sync.Once
 }
 
-func NewResilientStdioClient(server lm.MCPServer) *ResilientStdioClient {
-	if *server.Type != "stdio" {
+func NewResilientSSEClient(server lm.MCPServer) *ResilientSSEClient {
+	if *server.Type != "sse" {
 		return nil
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 
-	rsc := &ResilientStdioClient{
-		command:          *server.Command,
-		args:             server.Args,
+	rsc := &ResilientSSEClient{
+		baseURL:          *server.BaseURL,
+		headers:          server.Headers,
 		name:             server.Name,
 		ctx:              ctx,
 		cancel:           cancel,
-		restartCh:        make(chan struct{}, 1),
+		reconnectCh:      make(chan struct{}, 1),
 		notificationChan: make(chan mcp.Notification, 1),
 	}
 
-	go rsc.restartLoop()
-	rsc.restartCh <- struct{}{} // Trigger initial connection/start
+	go rsc.reconnectLoop()
+	rsc.reconnectCh <- struct{}{} // Trigger initial connection
 	return rsc
 }
 
-func (rsc *ResilientStdioClient) connect() error {
+// func (rsc *ResilientSSEClient) SetHeader(key, value string) {
+// 	rsc.mutex.Lock()
+// 	defer rsc.mutex.Unlock()
+// 	rsc.headers[key] = value
+// }
+
+func (rsc *ResilientSSEClient) connect() error {
+	log.Println("connecting...")
 	rsc.mutex.Lock()
 	defer rsc.mutex.Unlock()
 
@@ -57,31 +64,23 @@ func (rsc *ResilientStdioClient) connect() error {
 	}
 
 	factory := NewClientFactory()
-	// Pass command and its arguments directly, mirroring the setup in stdio-client-prev.go.
-	// The rsc.name should not be passed as a command-line argument to the stdio server.
-	// allArgs := append([]string{rsc.name}, rsc.args...) // This was incorrect.
-	factory.SetStdioConfig(rsc.command, rsc.args...)
-
-	log.Printf("[%s] Attempting to create client from factory...", rsc.name)
-	c, err := factory.CreateClient("stdio")
+	factory.SetSSEConfig(rsc.baseURL, rsc.headers, rsc.name)
+	c, err := factory.CreateClient("sse")
 	if err != nil {
 		log.Printf("[%s] failed to create client from factory: %v", rsc.name, err)
 		return err
 	}
 	if c == nil {
-		log.Printf("[%s] factory.CreateClient returned a nil client instance without error", rsc.name) // Clarified log
+		log.Printf("[%s] factory.CreateClient returned a nil client instance", rsc.name)
 		return fmt.Errorf("factory.CreateClient returned a nil client for %s", rsc.name)
 	}
-	log.Printf("[%s] Client created successfully from factory.", rsc.name)
 
-	log.Printf("[%s] Attempting to start client...", rsc.name)
 	if err := c.Start(rsc.ctx); err != nil {
-		log.Printf("[%s] Failed to start stdio client: %v", rsc.name, err)
+		log.Printf("[%s] Failed to start client: %v", rsc.name, err) // Changed Fatalf to Printf
 		return err
 	}
-	log.Printf("[%s] Client started successfully.", rsc.name)
 
-	fmt.Printf("[%s] Initializing stdio client (sending Initialize request)...\n", rsc.name) // Clarified log
+	fmt.Printf("[%s] Initializing client...\n", rsc.name)
 	initRequest := mcp.InitializeRequest{}
 	initRequest.Params.ProtocolVersion = mcp.LATEST_PROTOCOL_VERSION
 	initRequest.Params.ClientInfo = mcp.Implementation{
@@ -90,39 +89,22 @@ func (rsc *ResilientStdioClient) connect() error {
 	}
 	initRequest.Params.Capabilities = mcp.ClientCapabilities{}
 
-	// Define a timeout for the Initialize call
-	initializeTimeout := 15 * time.Second
-	initCtx, initCancel := context.WithTimeout(rsc.ctx, initializeTimeout)
-	defer initCancel()
-
-	initializeResult, err := c.Initialize(initCtx, initRequest)
-	if err != nil {
-		if errors.Is(err, context.DeadlineExceeded) {
-			log.Printf("[%s] Failed to initialize client: Initialize call timed out after %v: %v", rsc.name, initializeTimeout, err)
-		} else {
-			log.Printf("[%s] Failed to initialize client: %v", rsc.name, err)
-		}
+	if _, err := c.Initialize(rsc.ctx, initRequest); err != nil {
+		log.Printf("[%s] Failed to initialize client: %v", rsc.name, err)
 		return err
 	}
-	log.Printf("[%s] Client initialized successfully. Server capabilities: %+v", rsc.name, initializeResult.Capabilities)
 
 	// todo)) delete, for test
-	log.Printf("[%s] Attempting to list tools...", rsc.name)
 	toolsResult, err := c.ListTools(rsc.ctx, mcp.ListToolsRequest{})
 	if err != nil {
 		log.Printf("[%s] Failed to list tools: %v", rsc.name, err)
-		// Even if listing tools fails, we might still have a working client for other operations.
-		// Depending on requirements, you might choose to return err here or proceed.
-		// For now, we'll log and proceed to register OnNotification.
 	} else {
-		log.Printf("[%s] Tools listed successfully.", rsc.name)
 		fmt.Printf("[%s] Server has %d tools available\n", rsc.name, len(toolsResult.Tools))
 		for i, tool := range toolsResult.Tools {
 			fmt.Printf("  %d. %s - %s\n", i+1, tool.Name, tool.Description)
 		}
 	}
 
-	log.Printf("[%s] Setting up OnNotification callback...", rsc.name)
 	c.OnNotification(func(jsonNotification mcp.JSONRPCNotification) { // Changed rsc.client to c
 		actualNotification := jsonNotification.Notification // Directly assign the struct
 		// Check if the notification is meaningful, e.g., by checking if its Method is set
@@ -152,19 +134,19 @@ func (rsc *ResilientStdioClient) connect() error {
 	return nil
 }
 
-func (rsc *ResilientStdioClient) restartLoop() {
-	log.Printf("[%s] restartLoop started.", rsc.name)
+func (rsc *ResilientSSEClient) reconnectLoop() {
+	log.Printf("[%s] reconnectLoop started.", rsc.name)
 	for {
 		select {
 		case <-rsc.ctx.Done():
 			return
-		case <-rsc.restartCh:
-			log.Printf("[%s] Received signal on restartCh.", rsc.name)
-			log.Println("Restarting stdio client...") // Changed log message
+		case <-rsc.reconnectCh:
+			log.Printf("[%s] Received signal on reconnectCh.", rsc.name)
+			log.Println("Reconnecting SSE client...")
 
 			for attempt := 1; attempt <= 5; attempt++ {
 				if err := rsc.connect(); err != nil {
-					log.Printf("Restart attempt %d failed: %v", attempt, err) // Changed log message
+					log.Printf("Reconnection attempt %d failed: %v", attempt, err)
 
 					backoff := time.Duration(attempt) * time.Second
 					select {
@@ -173,7 +155,7 @@ func (rsc *ResilientStdioClient) restartLoop() {
 						return
 					}
 				} else {
-					log.Println("Restarted stdio client successfully") // Changed log message
+					log.Println("Reconnected successfully")
 					break
 				}
 			}
@@ -181,33 +163,33 @@ func (rsc *ResilientStdioClient) restartLoop() {
 	}
 }
 
-func (rsc *ResilientStdioClient) CallTool(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	log.Printf("[%s] CallTool invoked.", rsc.name)
+func (rsc *ResilientSSEClient) CallTool(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
+	log.Printf("[%s] CallTool invoked.", rsc.name) // Renamed log for clarity
 	rsc.mutex.RLock()
 	client := rsc.client
 	rsc.mutex.RUnlock()
 
 	if client == nil {
-		log.Printf("[%s] CallTool: client is nil. Triggering connection attempt via restartCh.", rsc.name)
+		log.Printf("[%s] CallTool: client is nil. Triggering connection attempt via reconnectCh.", rsc.name)
 		select {
-		case rsc.restartCh <- struct{}{}:
-			log.Printf("[%s] CallTool: Sent signal to restartCh for nil client.", rsc.name)
+		case rsc.reconnectCh <- struct{}{}:
+			log.Printf("[%s] CallTool: Sent signal to reconnectCh for nil client.", rsc.name)
 		default:
-			log.Printf("[%s] CallTool: restartCh is full or no listener ready for nil client signal.", rsc.name)
+			log.Printf("[%s] CallTool: reconnectCh is full or no listener ready for nil client signal.", rsc.name)
 		}
 		return nil, fmt.Errorf("client %s not connected, connection attempt triggered", rsc.name)
 	}
 
-	result, err := client.CallTool(ctx, req)
+	result, err := client.CallTool(ctx, req) // Use passed ctx
 	if err != nil {
 		log.Printf("[%s] CallTool: error from client.CallTool: %v", rsc.name, err)
 		if isConnectionError(err) {
-			log.Printf("[%s] CallTool: connection error detected. Triggering restart.", rsc.name)
+			log.Printf("[%s] CallTool: connection error detected. Triggering reconnect.", rsc.name)
 			select {
-			case rsc.restartCh <- struct{}{}:
-				log.Printf("[%s] CallTool: Sent signal to restartCh due to connection error.", rsc.name)
+			case rsc.reconnectCh <- struct{}{}:
+				log.Printf("[%s] CallTool: Sent signal to reconnectCh due to connection error.", rsc.name)
 			default:
-				log.Printf("[%s] CallTool: restartCh is full or no listener ready for connection error signal.", rsc.name)
+				log.Printf("[%s] CallTool: reconnectCh is full or no listener ready for connection error signal.", rsc.name)
 			}
 			return nil, fmt.Errorf("client %s connection error: %w", rsc.name, err)
 		}
@@ -216,42 +198,56 @@ func (rsc *ResilientStdioClient) CallTool(ctx context.Context, req mcp.CallToolR
 	return result, nil
 }
 
-func (rsc *ResilientStdioClient) Subscribe(ctx context.Context) (<-chan mcp.Notification, error) {
+func (rsc *ResilientSSEClient) Subscribe(ctx context.Context) (<-chan mcp.Notification, error) {
 	rsc.mutex.RLock()
 	client := rsc.client
+	// notificationChan is part of rsc, so it's available
 	rsc.mutex.RUnlock()
 
 	if client == nil {
 		return nil, fmt.Errorf("client %s not connected", rsc.name)
 	}
+
+	// For now, use an empty mcp.SubscribeRequest.
+	// If this type requires specific parameters for your use case,
+	// you may need to adjust this part or ask for clarification.
 	subRequest := mcp.SubscribeRequest{}
-	err := client.Subscribe(ctx, subRequest) // This is the library's client.Subscribe
+
+	err := client.Subscribe(ctx, subRequest) // Call the library's Subscribe
 	if err != nil {
-		if isConnectionError(err) {
+		if isConnectionError(err) { // Reuse existing isConnectionError logic
 			select {
-			case rsc.restartCh <- struct{}{}:
+			case rsc.reconnectCh <- struct{}{}:
 			default:
 			}
 			return nil, fmt.Errorf("client %s connection error during subscribe: %w", rsc.name, err)
 		}
 		return nil, fmt.Errorf("client %s failed to subscribe: %w", rsc.name, err)
 	}
+
 	return rsc.notificationChan, nil
 }
 
-func (rsc *ResilientStdioClient) Close() error {
+func (rsc *ResilientSSEClient) Close() error {
 	rsc.cancel()
+
 	rsc.mutex.Lock()
 	defer rsc.mutex.Unlock()
+
 	if rsc.notificationChan != nil {
 		rsc.notificationChanOnce.Do(func() {
 			close(rsc.notificationChan)
 		})
 	}
+
 	if rsc.client != nil {
 		return rsc.client.Close()
 	}
+
 	return nil
 }
 
-// Removed isConnectionError as it's already defined in the package (e.g., in sse-client.go)
+func isConnectionError(err error) bool {
+	return errors.Is(err, errors.New("connection lost")) ||
+		errors.Is(err, errors.New("connection failed"))
+}
