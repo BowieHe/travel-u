@@ -8,7 +8,7 @@
 
 	{
 		"name": "amap-amap-sse",
-		"type": "streamableHttp",
+		"type": "sse",
 		"baseUrl": "https://mcp.amap.com/sse?key=${AMAP_WEB_API}"
 	}
 ]

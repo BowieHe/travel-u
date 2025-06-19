@@ -3,14 +3,12 @@ package service
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"log"
 	"os"
 
 	localmcp "github.com/BowieHe/travel-u/pkg/mcp"
 	lmc "github.com/BowieHe/travel-u/pkg/mcp-client"
 	"github.com/BowieHe/travel-u/pkg/utils"
-	"github.com/mark3labs/mcp-go/mcp"
 )
 
 func GenServer() []localmcp.MCPServer {
@@ -84,30 +82,31 @@ func GenClient(ctx context.Context) []lmc.MCPClient {
 			continue // Skip to the next server configuration on error
 		}
 
-		log.Println("Initializing client...")
-		initRequest := mcp.InitializeRequest{}
-		initRequest.Params.ProtocolVersion = mcp.LATEST_PROTOCOL_VERSION
-		initRequest.Params.ClientInfo = mcp.Implementation{
-			Name:    serverCfg.Name + "-client",
-			Version: "1.0.0",
-		}
-		serverInfo, err := client.Initialize(ctx, initRequest)
-		if err != nil {
-			log.Fatalf("Failed to initialize: %v", err)
-		}
-		if serverInfo.Capabilities.Tools != nil {
-			fmt.Println("Fetching available tools...")
-			toolsRequest := mcp.ListToolsRequest{}
-			toolsResult, err := client.ListTools(ctx, toolsRequest)
-			if err != nil {
-				log.Printf("Failed to list tools: %v", err)
-			} else {
-				fmt.Printf("Server has %d tools available\n", len(toolsResult.Tools))
-				for i, tool := range toolsResult.Tools {
-					fmt.Printf("  %d. %s - %s\n", i+1, tool.Name, tool.Description)
-				}
-			}
-		}
+		// log.Println("Initializing client...")
+		// initRequest := mcp.InitializeRequest{}
+		// initRequest.Params.ProtocolVersion = mcp.LATEST_PROTOCOL_VERSION
+		// initRequest.Params.ClientInfo = mcp.Implementation{
+		// 	Name:    serverCfg.Name + "-client",
+		// 	Version: "1.0.0",
+		// }
+		// serverInfo, err := client.Initialize(ctx, initRequest)
+		// if err != nil {
+		// 	log.Fatalf("Failed to initialize: %v", err)
+		// }
+
+		// if serverInfo.Capabilities.Tools != nil {
+		// 	fmt.Println("Fetching available tools...")
+		// 	toolsRequest := mcp.ListToolsRequest{}
+		// 	toolsResult, err := client.ListTools(ctx, toolsRequest)
+		// 	if err != nil {
+		// 		log.Printf("Failed to list tools: %v", err)
+		// 	} else {
+		// 		fmt.Printf("Server has %d tools available\n", len(toolsResult.Tools))
+		// 		for i, tool := range toolsResult.Tools {
+		// 			fmt.Printf("  %d. %s - %s\n", i+1, tool.Name, tool.Description)
+		// 		}
+		// 	}
+		// }
 		clients = append(clients, client) // Store the created client
 		if serverCfg.Name != "" {
 			log.Printf("Successfully generated client for server: %s", serverCfg.Name)

@@ -21,3 +21,15 @@ type MCPServer struct {
 	Tags          []string          `json:"tags,omitempty"`
 	Timeout       *int              `json:"timeout,omitempty"`
 }
+
+type StdioOptions struct {
+	Command string   `json:"command"`
+	Args    []string `json:"args"`
+	Name    string   `json:"name"`
+}
+
+type HTTPOptions struct {
+	BaseURL string            `json:"baseUrl,omitempty"`
+	Name    string            `json:"name"`
+	Headers map[string]string `json:"headers,omitempty"`
+}
