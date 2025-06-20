@@ -11,7 +11,7 @@ import (
 	"github.com/mark3labs/mcp-go/client"
 	"github.com/mark3labs/mcp-go/mcp"
 
-	lm "github.com/BowieHe/travel-u/pkg/mcp"
+	"github.com/BowieHe/travel-u/pkg/types"
 )
 
 type ResilientSSEClient struct {
@@ -27,7 +27,7 @@ type ResilientSSEClient struct {
 	notificationChanOnce sync.Once
 }
 
-func NewResilientSSEClient(server lm.MCPServer) *ResilientSSEClient {
+func NewResilientSSEClient(server types.MCPServer) *ResilientSSEClient {
 	if *server.Type != "sse" {
 		return nil
 	}

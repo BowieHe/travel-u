@@ -6,18 +6,18 @@ import (
 	"log"
 	"os"
 
-	localmcp "github.com/BowieHe/travel-u/pkg/mcp"
 	lmc "github.com/BowieHe/travel-u/pkg/mcp-client"
+	"github.com/BowieHe/travel-u/pkg/types"
 	"github.com/BowieHe/travel-u/pkg/utils"
 )
 
-func GenServer() []localmcp.MCPServer {
+func GenServer() []types.MCPServer {
 	data, err := os.ReadFile("config/mcp-server.json")
 	if err != nil {
 		log.Fatalf("failed to read the config file: %v", err)
 	}
 
-	var servers []localmcp.MCPServer
+	var servers []types.MCPServer
 	if err := json.Unmarshal(data, &servers); err != nil {
 		log.Fatalf("failed to unmarshal MCP Server config from JSON: %v", err)
 	}

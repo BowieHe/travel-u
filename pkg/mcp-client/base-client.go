@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"log"
 
-	localmcp "github.com/BowieHe/travel-u/pkg/mcp"
+	"github.com/BowieHe/travel-u/pkg/types"
 	"github.com/mark3labs/mcp-go/client"
 	"github.com/mark3labs/mcp-go/mcp"
 )
@@ -46,7 +46,7 @@ func (bc *BaseClient) Close() error {
 }
 
 // NewMCPClientFromConfig creates a new MCPClient based on the server configuration.
-func NewMCPClientFromConfig(ctx context.Context, serverConfig localmcp.MCPServer) (MCPClient, error) {
+func NewMCPClientFromConfig(ctx context.Context, serverConfig types.MCPServer) (MCPClient, error) {
 	if serverConfig.Type == nil {
 		return nil, fmt.Errorf("MCP server type is missing for server: %s", serverConfig.Name)
 	}

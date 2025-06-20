@@ -5,7 +5,7 @@ import (
 	"log"
 	"os"
 
-	"github.com/BowieHe/travel-u/pkg/mcp"
+	"github.com/BowieHe/travel-u/pkg/types"
 	"github.com/mark3labs/mcp-go/client"
 	"github.com/mark3labs/mcp-go/client/transport"
 )
@@ -21,14 +21,14 @@ func NewClientFactory() *ClientFactory {
 }
 
 func (cf *ClientFactory) SetStdioConfig(command string, args ...string) {
-	cf.configs["stdio"] = mcp.StdioOptions{
+	cf.configs["stdio"] = types.StdioOptions{
 		Command: command,
 		Args:    args,
 	}
 }
 
 func (cf *ClientFactory) SetStreamableHTTPConfig(baseURL string, headers map[string]string, name string) {
-	cf.configs["streamablehttp"] = mcp.HTTPOptions{
+	cf.configs["streamablehttp"] = types.HTTPOptions{
 		BaseURL: baseURL,
 		Headers: headers,
 		Name:    name,
@@ -36,7 +36,7 @@ func (cf *ClientFactory) SetStreamableHTTPConfig(baseURL string, headers map[str
 }
 
 func (cf *ClientFactory) SetSSEConfig(baseURL string, headers map[string]string, name string) {
-	cf.configs["sse"] = mcp.HTTPOptions{
+	cf.configs["sse"] = types.HTTPOptions{
 		BaseURL: baseURL,
 		Headers: headers,
 		Name:    name,
@@ -46,7 +46,7 @@ func (cf *ClientFactory) SetSSEConfig(baseURL string, headers map[string]string,
 func (cf *ClientFactory) CreateClient(cType string) (*client.Client, error) {
 	switch cType {
 	case "stdio":
-		config, ok := cf.configs["stdio"].(mcp.StdioOptions)
+		config, ok := cf.configs["stdio"].(types.StdioOptions)
 		if !ok {
 			return nil, fmt.Errorf("stdio config not set")
 		}
@@ -54,7 +54,7 @@ func (cf *ClientFactory) CreateClient(cType string) (*client.Client, error) {
 		return client.NewStdioMCPClient(config.Command, nil, config.Args...)
 
 	case "streamableHttp":
-		config, ok := cf.configs["streamableHttp"].(mcp.HTTPOptions)
+		config, ok := cf.configs["streamableHttp"].(types.HTTPOptions)
 		if !ok {
 			return nil, fmt.Errorf("streamableHttp config not set")
 		}
@@ -66,7 +66,7 @@ func (cf *ClientFactory) CreateClient(cType string) (*client.Client, error) {
 		return client.NewStreamableHttpClient(config.BaseURL, options...)
 
 	case "sse":
-		config, ok := cf.configs["sse"].(mcp.HTTPOptions)
+		config, ok := cf.configs["sse"].(types.HTTPOptions)
 		if !ok {
 			return nil, fmt.Errorf("sse config not set")
 		}

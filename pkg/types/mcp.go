@@ -1,4 +1,4 @@
-package mcp
+package types
 
 // MCPServer defines the structure for an MCP server configuration.
 type MCPServer struct {
