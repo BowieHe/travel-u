@@ -7,6 +7,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/BowieHe/travel-u/internal/service"
 	"github.com/BowieHe/travel-u/pkg/logger"
 	"github.com/BowieHe/travel-u/pkg/utils"
 )
@@ -30,9 +31,22 @@ func main() {
 	debug := flag.Bool("debug", true, "Run the code in debug mode")
 	flag.Parse()
 	logger.Init(*debug)
+	// Initialize MCP Clients
+	if err := service.InitializeMCPClients("config/mcp-server.json"); err != nil {
+		logger.Get().Fatal().Err(err).Msg("Failed to initialize MCP clients")
+		// os.Exit(1) // or handle error appropriately
+	}
 	logger.Get().Info().Str("foo", "bar").Msg("Hello world")
 	logger.Get().Info().Msg("应用启动中...")
 
+	// service.Testllm()
+	service.TestllmStreaming()
+	// prompt := "What would be a good company name for a company that makes colorful socks?"
+	// completion, err := ll.GenerateFromSinglePrompt(appCtx, llm, prompt)
+	// if err != nil {
+	// 	logger.Get().Err(err)
+	// }
+	// logger.Get().Info().Msg(completion)
 	// todo)) uncommand in future
 	// servers := service.GenServer()
 	// for _, server := range servers {

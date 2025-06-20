@@ -228,6 +228,39 @@ func (rsc *ResilientSSEClient) Subscribe(ctx context.Context) (<-chan mcp.Notifi
 	return rsc.notificationChan, nil
 }
 
+func (rsc *ResilientSSEClient) ListTools(ctx context.Context) ([]mcp.Tool, error) {
+	rsc.mutex.RLock()
+	client := rsc.client
+	rsc.mutex.RUnlock()
+
+	if client == nil {
+		// Attempt to connect if client is nil, or return error
+		// For simplicity, returning error here. Could trigger restart.
+		// logger.Get().Warn().Msgf("[%s] ListTools: client is nil.", rsc.name) // Assuming logger is not used here or use "log" package
+		log.Printf("[%s] ListTools: client is nil.", rsc.name)
+		return nil, fmt.Errorf("client %s not connected for ListTools", rsc.name)
+	}
+
+	listToolsRequest := mcp.ListToolsRequest{} // Empty request params for now
+	result, err := client.ListTools(ctx, listToolsRequest)
+	if err != nil {
+		// logger.Get().Error().Err(err).Msgf("[%s] ListTools: error from client.ListTools", rsc.name)
+		log.Printf("[%s] ListTools: error from client.ListTools: %v", rsc.name, err)
+		// Optionally trigger restart on connection error
+		if isConnectionError(err) { // Assuming isConnectionError exists
+			select {
+			case rsc.reconnectCh <- struct{}{}:
+			default:
+			}
+		}
+		return nil, fmt.Errorf("client %s ListTools failed: %w", rsc.name, err)
+	}
+	if result == nil {
+		return []mcp.Tool{}, nil // Return empty slice if result is nil but no error
+	}
+	return result.Tools, nil
+}
+
 func (rsc *ResilientSSEClient) Close() error {
 	rsc.cancel()
 
