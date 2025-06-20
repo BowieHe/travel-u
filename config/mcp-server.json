@@ -1,14 +1,24 @@
 [
 	{
-		"name": "puppeteer",
+		"name": "fetch",
 		"type": "stdio",
-		"command": "npx",
-		"args": ["-y", "puppeteer-mcp-server"]
+		"command": "uvx",
+		"args": ["mcp-server-fetch"]
 	},
-
 	{
-		"name": "amap-amap-sse",
-		"type": "sse",
-		"baseUrl": "https://mcp.amap.com/sse?key=${AMAP_WEB_API}"
+		"name": "github",
+		"type": "stdio",
+		"command": "docker",
+		"args": [
+			"run",
+			"-i",
+			"--rm",
+			"-e",
+			"GITHUB_PERSONAL_ACCESS_TOKEN",
+			"swr.cn-north-4.myhuaweicloud.com/ddn-k8s/ghcr.io/github/github-mcp-server:latest"
+		],
+		"env": {
+			"GITHUB_PERSONAL_ACCESS_TOKEN": "${PAT}"
+		}
 	}
 ]

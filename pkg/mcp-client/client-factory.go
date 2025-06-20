@@ -20,10 +20,11 @@ func NewClientFactory() *ClientFactory {
 	}
 }
 
-func (cf *ClientFactory) SetStdioConfig(command string, args ...string) {
+func (cf *ClientFactory) SetStdioConfig(command string, env map[string]string, args ...string) {
 	cf.configs["stdio"] = types.StdioOptions{
 		Command: command,
 		Args:    args,
+		Env:     env,
 	}
 }
 
@@ -51,7 +52,13 @@ func (cf *ClientFactory) CreateClient(cType string) (*client.Client, error) {
 			return nil, fmt.Errorf("stdio config not set")
 		}
 
-		return client.NewStdioMCPClient(config.Command, nil, config.Args...)
+		var envVars []string
+		if config.Env != nil {
+			for k, v := range config.Env {
+				envVars = append(envVars, fmt.Sprintf("%s=%s", k, v))
+			}
+		}
+		return client.NewStdioMCPClient(config.Command, envVars, config.Args...)
 
 	case "streamableHttp":
 		config, ok := cf.configs["streamableHttp"].(types.HTTPOptions)
@@ -88,7 +95,7 @@ func demonstrateClientFactory() {
 	factory := NewClientFactory()
 
 	// Configure transports
-	factory.SetStdioConfig("go", "run", "server.go")
+	factory.SetStdioConfig("go", nil, "run", "server.go")
 	factory.SetStreamableHTTPConfig("http://localhost:8080/mcp", map[string]string{
 		"Authorization": "Bearer token",
 	}, "http")

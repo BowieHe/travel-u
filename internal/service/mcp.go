@@ -3,124 +3,109 @@ package service
 import (
 	"context"
 	"encoding/json"
-	"log"
+	"fmt"
 	"os"
+	"sync"
 
-	lmc "github.com/BowieHe/travel-u/pkg/mcp-client"
+	"github.com/BowieHe/travel-u/pkg/logger"
+	mcpclient "github.com/BowieHe/travel-u/pkg/mcp-client"
 	"github.com/BowieHe/travel-u/pkg/types"
-	"github.com/BowieHe/travel-u/pkg/utils"
+	"github.com/mark3labs/mcp-go/mcp"
 )
 
-func GenServer() []types.MCPServer {
-	data, err := os.ReadFile("config/mcp-server.json")
+// RegisteredMCPClient defines the interface for registered MCP clients.
+type RegisteredMCPClient interface {
+	CallTool(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error)
+	Subscribe(ctx context.Context) (<-chan mcp.Notification, error) // Matches ResilientClient's Subscribe
+	ListTools(ctx context.Context) ([]mcp.Tool, error)              // New method
+	Close() error
+	// Add other methods if needed by executeMCPTool, like GetName() if useful
+}
+
+var (
+	clientRegistry      = make(map[string]RegisteredMCPClient)
+	clientRegistryMutex = sync.RWMutex{} // For concurrent-safe access
+)
+
+// RegisterClient adds a client to the registry.
+func RegisterClient(name string, client RegisteredMCPClient) {
+	clientRegistryMutex.Lock()
+	defer clientRegistryMutex.Unlock()
+	clientRegistry[name] = client
+	logger.Get().Info().Msgf("Registered MCP client: %s", name)
+}
+
+// GetClient retrieves a client from the registry.
+func GetClient(name string) (RegisteredMCPClient, bool) {
+	clientRegistryMutex.RLock()
+	defer clientRegistryMutex.RUnlock()
+	client, found := clientRegistry[name]
+	return client, found
+}
+
+// GetRegisteredClientNames returns a slice of registered client names.
+func GetRegisteredClientNames() []string {
+	clientRegistryMutex.RLock()
+	defer clientRegistryMutex.RUnlock()
+	names := make([]string, 0, len(clientRegistry))
+	for name := range clientRegistry {
+		names = append(names, name)
+	}
+	return names
+}
+
+// InitializeMCPClients initializes MCP clients from a configuration file.
+func InitializeMCPClients(configFile string) error {
+	logger.Get().Info().Msgf("Initializing MCP clients from config: %s", configFile)
+	data, err := os.ReadFile(configFile)
 	if err != nil {
-		log.Fatalf("failed to read the config file: %v", err)
+		logger.Get().Error().Err(err).Msgf("Failed to read MCP server config file: %s", configFile)
+		return fmt.Errorf("failed to read MCP server config %s: %w", configFile, err)
 	}
 
 	var servers []types.MCPServer
 	if err := json.Unmarshal(data, &servers); err != nil {
-		log.Fatalf("failed to unmarshal MCP Server config from JSON: %v", err)
+		logger.Get().Error().Err(err).Msg("Failed to unmarshal MCP server config")
+		return fmt.Errorf("failed to unmarshal MCP server config: %w", err)
 	}
 
-	// Expand environment variables in server configurations
-	for i := range servers {
-
-		server := &servers[i] // Use a pointer to modify the original struct in the slice
-
-		if server.BaseURL != nil && *server.BaseURL != "" {
-			expandedBaseURL := utils.ExpandEnvVars(*server.BaseURL)
-			server.BaseURL = &expandedBaseURL
-		}
-
-		if server.Command != nil && *server.Command != "" {
-			expandedCommand := utils.ExpandEnvVars(*server.Command)
-			server.Command = &expandedCommand
-		}
-
-		if server.Args != nil {
-			for j, arg := range server.Args {
-				server.Args[j] = utils.ExpandEnvVars(arg)
-			}
-		}
-
-		if server.Env != nil {
-			for key, val := range server.Env {
-				server.Env[key] = utils.ExpandEnvVars(val)
-			}
-		}
-
-		if server.Headers != nil {
-			for key, val := range server.Headers {
-				server.Headers[key] = utils.ExpandEnvVars(val)
-			}
-		}
+	if len(servers) == 0 {
+		logger.Get().Warn().Msg("No MCP servers defined in config.")
+		return nil
 	}
 
-	for i, server := range servers {
-		jsonData, err := json.MarshalIndent(server, "", "  ")
-		if err != nil {
-			log.Printf("Error marshalling processed server to JSON for logging: %v", err)
-			log.Printf("Processed server data (default format) (server %d): %+v", i, server)
+	for _, serverConfig := range servers {
+		var client RegisteredMCPClient // Use the interface type
+
+		if serverConfig.Type == nil {
+			logger.Get().Error().Msgf("Server type is nil for server: %s. Skipping.", serverConfig.Name)
+			continue
+		}
+		// Now it's safe to dereference serverConfig.Type
+		logger.Get().Info().Msgf("Processing server: %s, Type: %s", serverConfig.Name, *serverConfig.Type)
+
+		switch *serverConfig.Type {
+		case "stdio":
+			stdioClient := mcpclient.NewResilientStdioClient(serverConfig)
+			if stdioClient != nil {
+				client = stdioClient
+			}
+		case "sse":
+			sseClient := mcpclient.NewResilientSSEClient(serverConfig)
+			if sseClient != nil {
+				client = sseClient
+			}
+		default:
+			logger.Get().Warn().Msgf("Unsupported MCP server type: %s for server %s", *serverConfig.Type, serverConfig.Name)
+			continue
+		}
+
+		if client != nil {
+			RegisterClient(serverConfig.Name, client)
 		} else {
-			log.Printf("Processed server config with env vars (server %d):\n%s", i, string(jsonData))
+			logger.Get().Error().Msgf("Failed to initialize client for server: %s", serverConfig.Name)
 		}
 	}
-
-	return servers
-}
-
-func GenClient(ctx context.Context) []lmc.MCPClient {
-	servers := GenServer()      // Call GenServer internally to get configurations
-	var clients []lmc.MCPClient // Changed type from BaseClient to MCPClient
-
-	// Iterate over server configurations and create clients
-	for _, serverCfg := range servers {
-		log.Printf("generating clients for server: %v", serverCfg.Name)
-		client, err := lmc.NewMCPClientFromConfig(ctx, serverCfg)
-		if err != nil {
-			log.Printf("Error generating client for server %s: %v", serverCfg.Name, err)
-			continue // Skip to the next server configuration on error
-		}
-
-		// log.Println("Initializing client...")
-		// initRequest := mcp.InitializeRequest{}
-		// initRequest.Params.ProtocolVersion = mcp.LATEST_PROTOCOL_VERSION
-		// initRequest.Params.ClientInfo = mcp.Implementation{
-		// 	Name:    serverCfg.Name + "-client",
-		// 	Version: "1.0.0",
-		// }
-		// serverInfo, err := client.Initialize(ctx, initRequest)
-		// if err != nil {
-		// 	log.Fatalf("Failed to initialize: %v", err)
-		// }
-
-		// if serverInfo.Capabilities.Tools != nil {
-		// 	fmt.Println("Fetching available tools...")
-		// 	toolsRequest := mcp.ListToolsRequest{}
-		// 	toolsResult, err := client.ListTools(ctx, toolsRequest)
-		// 	if err != nil {
-		// 		log.Printf("Failed to list tools: %v", err)
-		// 	} else {
-		// 		fmt.Printf("Server has %d tools available\n", len(toolsResult.Tools))
-		// 		for i, tool := range toolsResult.Tools {
-		// 			fmt.Printf("  %d. %s - %s\n", i+1, tool.Name, tool.Description)
-		// 		}
-		// 	}
-		// }
-		clients = append(clients, client) // Store the created client
-		if serverCfg.Name != "" {
-			log.Printf("Successfully generated client for server: %s", serverCfg.Name)
-		} else {
-			log.Printf("Successfully generated client for an unnamed server.")
-		}
-		// TODO: Further integrate ctx if client operations (e.g., client.Start(ctx)) are needed.
-	}
-	// Note: The 'clients' slice is populated but not returned or actively managed further by this function.
-	// This behavior might need to be revisited based on application requirements for client lifecycle management,
-	// such as returning the clients or starting them.
-	// For now, we assume clients might start themselves or be managed elsewhere.
-	// If clients need to be explicitly started and managed here, that logic would be added.
-	// For example, you might iterate over `clients` and call `client.Start(ctx)`.
-
-	return clients
+	logger.Get().Info().Msg("MCP client initialization complete.")
+	return nil
 }

@@ -23,9 +23,10 @@ type MCPServer struct {
 }
 
 type StdioOptions struct {
-	Command string   `json:"command"`
-	Args    []string `json:"args"`
-	Name    string   `json:"name"`
+	Command string            `json:"command"`
+	Args    []string          `json:"args"`
+	Name    string            `json:"name"`
+	Env     map[string]string `json:"env,omitempty"`
 }
 
 type HTTPOptions struct {

@@ -17,6 +17,7 @@ import (
 type ResilientStdioClient struct {
 	command              string
 	args                 []string
+	env                  map[string]string // New field
 	client               *client.Client
 	ctx                  context.Context
 	cancel               context.CancelFunc
@@ -36,6 +37,7 @@ func NewResilientStdioClient(server types.MCPServer) *ResilientStdioClient {
 	rsc := &ResilientStdioClient{
 		command:          *server.Command,
 		args:             server.Args,
+		env:              server.Env, // Assign the Env map
 		name:             server.Name,
 		ctx:              ctx,
 		cancel:           cancel,
@@ -60,9 +62,10 @@ func (rsc *ResilientStdioClient) connect() error {
 	// Pass command and its arguments directly, mirroring the setup in stdio-client-prev.go.
 	// The rsc.name should not be passed as a command-line argument to the stdio server.
 	// allArgs := append([]string{rsc.name}, rsc.args...) // This was incorrect.
-	factory.SetStdioConfig(rsc.command, rsc.args...)
+	// Pass command, its arguments, and the environment variables.
+	factory.SetStdioConfig(rsc.command, rsc.env, rsc.args...) // Pass rsc.env here
 
-	logger.Get().Info().Msgf("[%s] Attempting to create client from factory...", rsc.name)
+	logger.Get().Info().Msgf("[%s] Attempting to create client from factory with command: %s, args: %v, env: %v", rsc.name, rsc.command, rsc.args, rsc.env) // Added env to log
 	c, err := factory.CreateClient("stdio")
 	if err != nil {
 		logger.Get().Error().Msgf("[%s] failed to create client from factory: %v", rsc.name, err)
@@ -237,6 +240,37 @@ func (rsc *ResilientStdioClient) Subscribe(ctx context.Context) (<-chan mcp.Noti
 		return nil, fmt.Errorf("client %s failed to subscribe: %w", rsc.name, err)
 	}
 	return rsc.notificationChan, nil
+}
+
+func (rsc *ResilientStdioClient) ListTools(ctx context.Context) ([]mcp.Tool, error) {
+	rsc.mutex.RLock()
+	client := rsc.client
+	rsc.mutex.RUnlock()
+
+	if client == nil {
+		// Attempt to connect if client is nil, or return error
+		// For simplicity, returning error here. Could trigger restart.
+		logger.Get().Warn().Msgf("[%s] ListTools: client is nil.", rsc.name)
+		return nil, fmt.Errorf("client %s not connected for ListTools", rsc.name)
+	}
+
+	listToolsRequest := mcp.ListToolsRequest{} // Empty request params for now
+	result, err := client.ListTools(ctx, listToolsRequest)
+	if err != nil {
+		logger.Get().Error().Err(err).Msgf("[%s] ListTools: error from client.ListTools", rsc.name)
+		// Optionally trigger restart on connection error
+		if isConnectionError(err) { // Assuming isConnectionError exists
+			select {
+			case rsc.restartCh <- struct{}{}:
+			default:
+			}
+		}
+		return nil, fmt.Errorf("client %s ListTools failed: %w", rsc.name, err)
+	}
+	if result == nil {
+		return []mcp.Tool{}, nil // Return empty slice if result is nil but no error
+	}
+	return result.Tools, nil
 }
 
 func (rsc *ResilientStdioClient) Close() error {
