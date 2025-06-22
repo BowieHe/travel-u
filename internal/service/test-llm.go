@@ -2,6 +2,7 @@ package service
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -102,7 +103,7 @@ func executeMCPTool(ctx context.Context, llmToolName string, argumentsJSON strin
 		return "", fmt.Errorf("unsupported LLM tool: %s", llmToolName)
 	}
 
-	logger.Get().Info().Msgf("Executing MCP tool: %s with args: %s", llmToolName, argumentsJSON)
+	logger.Get().Debug().Msgf("Executing MCP tool: %s with args: %s", llmToolName, argumentsJSON)
 
 	var parsedArgs struct {
 		Operation   string         `json:"operation"`
@@ -181,7 +182,7 @@ func handleToolCallAndRespond(ctx context.Context, toolCall llms.ToolCall, llm *
 		return errors.New("nil FunctionCall in toolCall")
 	}
 
-	logger.Get().Info().Msgf("LLM requests tool call. ID: %s, Name: %s, Args: %s",
+	logger.Get().Debug().Msgf("LLM requests tool call. ID: %s, Name: %s, Args: %s",
 		toolCall.ID, toolCall.FunctionCall.Name, toolCall.FunctionCall.Arguments)
 
 	toolResultContent, err := executeMCPTool(ctx, toolCall.FunctionCall.Name, toolCall.FunctionCall.Arguments)
@@ -436,13 +437,19 @@ func TestllmStreaming() {
 			llms.WithStreamingFunc(func(ctx context.Context, chunk []byte) error {
 				var data map[string]any
 				if err := json.Unmarshal(chunk, &data); err == nil {
-					if msg, ok := data["message"].(string); ok {
-						fmt.Print(msg)
-					} else {
-						fmt.Print(string(chunk))
+					// Skip printing if this is part of a tool call
+					if _, hasToolCalls := data["tool_calls"]; !hasToolCalls {
+						if msg, ok := data["message"].(string); ok {
+							fmt.Print(msg)
+						} else {
+							fmt.Print(string(chunk))
+						}
 					}
 				} else {
-					fmt.Print(string(chunk))
+					// Skip printing raw chunks that might be part of tool calls
+					if !bytes.Contains(chunk, []byte(`"tool_calls"`)) && !bytes.Contains(chunk, []byte(`"function"`)) {
+						fmt.Print(string(chunk))
+					}
 				}
 				streamedContentBuilder.Write(chunk)
 				return nil
@@ -459,6 +466,12 @@ func TestllmStreaming() {
 
 		// Check for tool calls
 		if len(llmResponse.Choices) > 0 && len(llmResponse.Choices[0].ToolCalls) > 0 {
+			// Print formatted tool call information
+			for _, toolCall := range llmResponse.Choices[0].ToolCalls {
+				args, _ := json.MarshalIndent(toolCall.FunctionCall.Arguments, "", "  ")
+				fmt.Printf("AI is preparing to call tool: '%s' with arguments: %s\n",
+					toolCall.FunctionCall.Name, args)
+			}
 			// LLM wants to make tool calls
 
 			// 1. Construct the AI message that contained the tool call requests.

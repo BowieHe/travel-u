@@ -185,7 +185,7 @@ func (rsc *ResilientStdioClient) restartLoop() {
 }
 
 func (rsc *ResilientStdioClient) CallTool(ctx context.Context, req mcp.CallToolRequest) (*mcp.CallToolResult, error) {
-	logger.Get().Info().Msgf("[%s] CallTool invoked.", rsc.name)
+	logger.Get().Debug().Msgf("[%s] CallTool invoked.", rsc.name)
 	rsc.mutex.RLock()
 	client := rsc.client
 	rsc.mutex.RUnlock()
