@@ -105,9 +105,9 @@ func executeMCPTool(ctx context.Context, llmToolName string, argumentsJSON strin
 	logger.Get().Info().Msgf("Executing MCP tool: %s with args: %s", llmToolName, argumentsJSON)
 
 	var parsedArgs struct {
-		Operation   string                 `json:"operation"`
-		Resource    string                 `json:"resource"` // This is the MCP client name
-		QueryParams map[string]interface{} `json:"params"`
+		Operation   string         `json:"operation"`
+		Resource    string         `json:"resource"` // This is the MCP client name
+		QueryParams map[string]any `json:"params"`
 	}
 
 	if err := json.Unmarshal([]byte(argumentsJSON), &parsedArgs); err != nil {
@@ -137,7 +137,7 @@ func executeMCPTool(ctx context.Context, llmToolName string, argumentsJSON strin
 	callCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
-	logger.Get().Info().Msgf("Calling MCP client '%s' tool '%s' with params: %+v", parsedArgs.Resource, parsedArgs.Operation, parsedArgs.QueryParams)
+	logger.Get().Debug().Msgf("Calling MCP client '%s' tool '%s' with params: %+v", parsedArgs.Resource, parsedArgs.Operation, parsedArgs.QueryParams)
 	result, err := mcpClient.CallTool(callCtx, request)
 	if err != nil {
 		logger.Get().Error().Err(err).Msgf("MCP client.CallTool failed for client %s, operation %s", parsedArgs.Resource, parsedArgs.Operation)
@@ -268,7 +268,16 @@ func handleToolCallAndRespond(ctx context.Context, toolCall llms.ToolCall, llm *
 	var finalResponseBuilder strings.Builder
 	_, err = llm.GenerateContent(ctx, messagesForLLM,
 		llms.WithStreamingFunc(func(ctx context.Context, chunk []byte) error {
-			// fmt.Print(string(chunk))
+			var data map[string]any
+			if err := json.Unmarshal(chunk, &data); err == nil {
+				if msg, ok := data["message"].(string); ok {
+					fmt.Print(msg)
+				} else {
+					fmt.Print(string(chunk))
+				}
+			} else {
+				fmt.Print(string(chunk))
+			}
 			finalResponseBuilder.Write(chunk)
 			return nil
 		}),
@@ -421,12 +430,20 @@ func TestllmStreaming() {
 			}
 		}
 
-		// debug only
-		// fmt.Print("AI: ")
+		fmt.Print("AI: ")
 		var streamedContentBuilder strings.Builder
 		llmResponse, err := llm.GenerateContent(ctx, currentMessagesForLLM,
 			llms.WithStreamingFunc(func(ctx context.Context, chunk []byte) error {
-				// fmt.Print(string(chunk))
+				var data map[string]any
+				if err := json.Unmarshal(chunk, &data); err == nil {
+					if msg, ok := data["message"].(string); ok {
+						fmt.Print(msg)
+					} else {
+						fmt.Print(string(chunk))
+					}
+				} else {
+					fmt.Print(string(chunk))
+				}
 				streamedContentBuilder.Write(chunk)
 				return nil
 			}),
@@ -461,7 +478,7 @@ func TestllmStreaming() {
 			}
 			// logger.Get().Debug().Msgf("Added AI message with tool call requests to memory. Content: '%s', ToolCalls: %d", aiMessageWithToolCallRequests.Content, len(aiMessageWithToolCallRequests.ToolCalls))
 
-			// 3. Now, iterate and handle each tool call.
+			// 3. Now, iterate and handle each tool call.DBG Added final AI response to memory:
 			for _, toolCall := range llmResponse.Choices[0].ToolCalls {
 				// The handleToolCallAndRespond function will add the ToolChatMessage (result)
 				// and then call the LLM again.

@@ -32,7 +32,7 @@ func RegisterClient(name string, client RegisteredMCPClient) {
 	clientRegistryMutex.Lock()
 	defer clientRegistryMutex.Unlock()
 	clientRegistry[name] = client
-	logger.Get().Info().Msgf("Registered MCP client: %s", name)
+	logger.Get().Debug().Msgf("Registered MCP client: %s", name)
 }
 
 // GetClient retrieves a client from the registry.
@@ -82,7 +82,7 @@ func InitializeMCPClients(configFile string) error {
 			continue
 		}
 		// Now it's safe to dereference serverConfig.Type
-		logger.Get().Info().Msgf("Processing server: %s, Type: %s", serverConfig.Name, *serverConfig.Type)
+		logger.Get().Debug().Msgf("Processing server: %s, Type: %s", serverConfig.Name, *serverConfig.Type)
 
 		switch *serverConfig.Type {
 		case "stdio":
@@ -106,6 +106,6 @@ func InitializeMCPClients(configFile string) error {
 			logger.Get().Error().Msgf("Failed to initialize client for server: %s", serverConfig.Name)
 		}
 	}
-	logger.Get().Info().Msg("MCP client initialization complete.")
+	logger.Get().Debug().Msg("MCP client initialization complete.")
 	return nil
 }

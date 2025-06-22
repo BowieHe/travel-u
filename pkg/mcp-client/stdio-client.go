@@ -65,7 +65,7 @@ func (rsc *ResilientStdioClient) connect() error {
 	// Pass command, its arguments, and the environment variables.
 	factory.SetStdioConfig(rsc.command, rsc.env, rsc.args...) // Pass rsc.env here
 
-	logger.Get().Info().Msgf("[%s] Attempting to create client from factory with command: %s, args: %v, env: %v", rsc.name, rsc.command, rsc.args, rsc.env) // Added env to log
+	logger.Get().Debug().Msgf("[%s] Attempting to create client from factory with command: %s, args: %v, env: %v", rsc.name, rsc.command, rsc.args, rsc.env) // Added env to log
 	c, err := factory.CreateClient("stdio")
 	if err != nil {
 		logger.Get().Error().Msgf("[%s] failed to create client from factory: %v", rsc.name, err)
@@ -75,16 +75,16 @@ func (rsc *ResilientStdioClient) connect() error {
 		logger.Get().Error().Msgf("[%s] factory.CreateClient returned a nil client instance without error", rsc.name) // Clarified log
 		return fmt.Errorf("factory.CreateClient returned a nil client for %s", rsc.name)
 	}
-	logger.Get().Info().Msgf("[%s] Client created successfully from factory.", rsc.name)
+	logger.Get().Debug().Msgf("[%s] Client created successfully from factory.", rsc.name)
 
-	logger.Get().Info().Msgf("[%s] Attempting to start client...", rsc.name)
+	logger.Get().Debug().Msgf("[%s] Attempting to start client...", rsc.name)
 	if err := c.Start(rsc.ctx); err != nil {
 		logger.Get().Error().Msgf("[%s] Failed to start stdio client: %v", rsc.name, err)
 		return err
 	}
-	logger.Get().Info().Msgf("[%s] Client started successfully.", rsc.name)
+	logger.Get().Debug().Msgf("[%s] Client started successfully.", rsc.name)
 
-	fmt.Printf("[%s] Initializing stdio client (sending Initialize request)...\n", rsc.name) // Clarified log
+	logger.Get().Debug().Msgf("[%s] Initializing stdio client (sending Initialize request)...\n", rsc.name) // Clarified log
 	initRequest := mcp.InitializeRequest{}
 	initRequest.Params.ProtocolVersion = mcp.LATEST_PROTOCOL_VERSION
 	initRequest.Params.ClientInfo = mcp.Implementation{
@@ -107,10 +107,10 @@ func (rsc *ResilientStdioClient) connect() error {
 		}
 		return err
 	}
-	logger.Get().Info().Msgf("[%s] Client initialized successfully. Server capabilities: %+v", rsc.name, initializeResult.Capabilities)
+	logger.Get().Debug().Msgf("[%s] Client initialized successfully. Server capabilities: %+v", rsc.name, initializeResult.Capabilities)
 
 	// todo)) delete, for test
-	logger.Get().Info().Msgf("[%s] Attempting to list tools...", rsc.name)
+	logger.Get().Debug().Msgf("[%s] Attempting to list tools...", rsc.name)
 	toolsResult, err := c.ListTools(rsc.ctx, mcp.ListToolsRequest{})
 	if err != nil {
 		logger.Get().Error().Msgf("[%s] Failed to list tools: %v", rsc.name, err)
@@ -118,14 +118,14 @@ func (rsc *ResilientStdioClient) connect() error {
 		// Depending on requirements, you might choose to return err here or proceed.
 		// For now, we'll log and proceed to register OnNotification.
 	} else {
-		logger.Get().Info().Msgf("[%s] Tools listed successfully.", rsc.name)
-		fmt.Printf("[%s] Server has %d tools available\n", rsc.name, len(toolsResult.Tools))
+		logger.Get().Debug().Msgf("[%s] Tools listed successfully.", rsc.name)
+		logger.Get().Debug().Msgf("[%s] Server has %d tools available\n", rsc.name, len(toolsResult.Tools))
 		for i, tool := range toolsResult.Tools {
-			fmt.Printf("  %d. %s - %s\n", i+1, tool.Name, tool.Description)
+			logger.Get().Debug().Msgf("  %d. %s - %s\n", i+1, tool.Name, tool.Description)
 		}
 	}
 
-	logger.Get().Info().Msgf("[%s] Setting up OnNotification callback...", rsc.name)
+	logger.Get().Debug().Msgf("[%s] Setting up OnNotification callback...", rsc.name)
 	c.OnNotification(func(jsonNotification mcp.JSONRPCNotification) { // Changed rsc.client to c
 		actualNotification := jsonNotification.Notification // Directly assign the struct
 		// Check if the notification is meaningful, e.g., by checking if its Method is set
@@ -156,14 +156,14 @@ func (rsc *ResilientStdioClient) connect() error {
 }
 
 func (rsc *ResilientStdioClient) restartLoop() {
-	logger.Get().Info().Msgf("[%s] restartLoop started.", rsc.name)
+	logger.Get().Debug().Msgf("[%s] restartLoop started.", rsc.name)
 	for {
 		select {
 		case <-rsc.ctx.Done():
 			return
 		case <-rsc.restartCh:
-			logger.Get().Info().Msgf("[%s] Received signal on restartCh.", rsc.name)
-			logger.Get().Info().Msgf("[%s] Restarting stdio client...", rsc.name) // Changed log message
+			logger.Get().Debug().Msgf("[%s] Received signal on restartCh.", rsc.name)
+			logger.Get().Debug().Msgf("[%s] Restarting stdio client...", rsc.name) // Changed log message
 
 			for attempt := 1; attempt <= 5; attempt++ {
 				if err := rsc.connect(); err != nil {
@@ -176,7 +176,7 @@ func (rsc *ResilientStdioClient) restartLoop() {
 						return
 					}
 				} else {
-					logger.Get().Info().Msgf("[%s] Restarted stdio client successfully", rsc.name) // Changed log message
+					logger.Get().Debug().Msgf("[%s] Restarted stdio client successfully", rsc.name) // Changed log message
 					break
 				}
 			}
