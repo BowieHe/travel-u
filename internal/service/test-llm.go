@@ -144,13 +144,34 @@ func executeMCPTool(ctx context.Context, llmToolName string, argumentsJSON strin
 		return "", fmt.Errorf("MCP client.CallTool for '%s' operation '%s' failed: %w", parsedArgs.Resource, parsedArgs.Operation, err)
 	}
 
-	resultBytes, err := json.Marshal(result.Result)
-	if err != nil {
-		logger.Get().Error().Err(err).Msg("Failed to marshal MCP tool result")
-		return "", fmt.Errorf("failed to marshal MCP tool result: %w", err)
+	// Check if the tool call resulted in an error reported by the tool itself.
+	if result.IsError {
+		logger.Get().Warn().Msgf("MCP tool '%s' executed with an error flag.", parsedArgs.Operation)
+		// Even with an error, we might have content. We'll marshal whatever is there.
 	}
 
-	logger.Get().Info().Msgf("MCP tool '%s' executed successfully. Result: %s", parsedArgs.Operation, string(resultBytes))
+	// Check if the content slice is empty. This is the most reliable way to see if nothing was returned.
+	if len(result.Content) == 0 {
+		logger.Get().Info().Msgf("MCP tool '%s' executed successfully but returned no content.", parsedArgs.Operation)
+		// Return a structured message indicating no data was returned.
+		return `{"status": "success", "content": "Tool executed but returned no data."}`, nil
+	}
+
+	// The result to be returned to the LLM should be the content of the tool call.
+	// The LLM expects the content part, not the entire CallToolResult structure.
+	resultBytes, err := json.Marshal(result.Content)
+	if err != nil {
+		logger.Get().Error().Err(err).Msg("Failed to marshal MCP tool result content")
+		return "", fmt.Errorf("failed to marshal MCP tool result content: %w", err)
+	}
+
+	// Handle cases where the result is an empty JSON object
+	if string(resultBytes) == "{}" || string(resultBytes) == "null" {
+		logger.Get().Info().Msgf("MCP tool '%s' executed successfully but returned an empty result.", parsedArgs.Operation)
+		return `{"status": "success", "content": "Tool executed but returned no data."}`, nil
+	}
+
+	logger.Get().Debug().Msgf("MCP tool '%s' executed successfully. Result: %s", parsedArgs.Operation, string(resultBytes))
 	return string(resultBytes), nil
 }
 
@@ -174,7 +195,7 @@ func handleToolCallAndRespond(ctx context.Context, toolCall llms.ToolCall, llm *
 		logger.Get().Error().Err(err).Msg("Failed to add tool response to chat memory")
 		return fmt.Errorf("failed to add tool response to memory: %w", err)
 	}
-	logger.Get().Info().Msgf("Added tool response to memory. ToolID: %s, Content: %s", toolCall.ID, toolResultContent)
+	logger.Get().Debug().Msgf("Added tool response to memory. ToolID: %s, Content: %s", toolCall.ID, toolResultContent)
 
 	chatMessages, err := chatMemory.ChatHistory.Messages(ctx)
 	if err != nil {
@@ -242,11 +263,12 @@ func handleToolCallAndRespond(ctx context.Context, toolCall llms.ToolCall, llm *
 		}
 	}
 
-	fmt.Print("\nAI (after tool call): ")
+	// debug only
+	// fmt.Print("\nAI (after tool call): ")
 	var finalResponseBuilder strings.Builder
 	_, err = llm.GenerateContent(ctx, messagesForLLM,
 		llms.WithStreamingFunc(func(ctx context.Context, chunk []byte) error {
-			fmt.Print(string(chunk))
+			// fmt.Print(string(chunk))
 			finalResponseBuilder.Write(chunk)
 			return nil
 		}),
@@ -265,7 +287,7 @@ func handleToolCallAndRespond(ctx context.Context, toolCall llms.ToolCall, llm *
 		logger.Get().Error().Err(err).Msg("Failed to add final AI response to chat memory")
 		return fmt.Errorf("failed to add final AI response to memory: %w", err)
 	}
-	logger.Get().Info().Msgf("Added final AI response to memory: %s", finalAIResponse)
+	logger.Get().Debug().Msgf("Added final AI response to memory: %s", finalAIResponse)
 	return nil
 }
 
@@ -346,16 +368,65 @@ func TestllmStreaming() {
 			continue
 		}
 
+		// Correctly reconstruct message history for the LLM call
 		currentMessagesForLLM := make([]llms.MessageContent, len(chatHistMessages))
 		for i, msg := range chatHistMessages {
-			currentMessagesForLLM[i] = llms.TextParts(msg.GetType(), msg.GetContent())
+			switch msg.GetType() {
+			case llms.ChatMessageTypeSystem:
+				currentMessagesForLLM[i] = llms.MessageContent{Role: llms.ChatMessageTypeSystem, Parts: []llms.ContentPart{llms.TextContent{Text: msg.GetContent()}}}
+			case llms.ChatMessageTypeHuman:
+				currentMessagesForLLM[i] = llms.MessageContent{Role: llms.ChatMessageTypeHuman, Parts: []llms.ContentPart{llms.TextContent{Text: msg.GetContent()}}}
+			case llms.ChatMessageTypeAI:
+				aiMsg, ok := msg.(llms.AIChatMessage)
+				if !ok {
+					logger.Get().Error().Msgf("Could not cast AI message from history to llms.AIChatMessage: %+v", msg)
+					currentMessagesForLLM[i] = llms.MessageContent{Role: llms.ChatMessageTypeAI, Parts: []llms.ContentPart{llms.TextContent{Text: msg.GetContent()}}}
+					continue
+				}
+				parts := []llms.ContentPart{llms.TextContent{Text: aiMsg.Content}}
+				if len(aiMsg.ToolCalls) > 0 {
+					for _, tc := range aiMsg.ToolCalls {
+						parts = append(parts, llms.ToolCall{
+							ID:   tc.ID,
+							Type: tc.Type,
+							FunctionCall: &llms.FunctionCall{
+								Name:      tc.FunctionCall.Name,
+								Arguments: tc.FunctionCall.Arguments,
+							},
+						})
+					}
+				}
+				currentMessagesForLLM[i] = llms.MessageContent{Role: llms.ChatMessageTypeAI, Parts: parts}
+			case llms.ChatMessageTypeTool:
+				toolMsg, ok := msg.(llms.ToolChatMessage)
+				if !ok {
+					logger.Get().Error().Msgf("Could not cast Tool message from history to llms.ToolChatMessage: %+v", msg)
+					currentMessagesForLLM[i] = llms.MessageContent{Role: llms.ChatMessageTypeTool, Parts: []llms.ContentPart{llms.TextContent{Text: msg.GetContent()}}}
+					continue
+				}
+				// The key is to send a `ToolCallResponse` part, not just text.
+				currentMessagesForLLM[i] = llms.MessageContent{
+					Role: llms.ChatMessageTypeTool,
+					Parts: []llms.ContentPart{
+						llms.ToolCallResponse{
+							ToolCallID: toolMsg.ID,
+							// Name is not easily available here, but the ID is the crucial part.
+							Content: toolMsg.Content,
+						},
+					},
+				}
+			default:
+				logger.Get().Warn().Msgf("Unhandled chat message type in history for LLM conversion: %s", msg.GetType())
+				currentMessagesForLLM[i] = llms.MessageContent{Role: llms.ChatMessageType(msg.GetType()), Parts: []llms.ContentPart{llms.TextContent{Text: msg.GetContent()}}}
+			}
 		}
 
-		fmt.Print("AI: ")
+		// debug only
+		// fmt.Print("AI: ")
 		var streamedContentBuilder strings.Builder
 		llmResponse, err := llm.GenerateContent(ctx, currentMessagesForLLM,
 			llms.WithStreamingFunc(func(ctx context.Context, chunk []byte) error {
-				fmt.Print(string(chunk))
+				// fmt.Print(string(chunk))
 				streamedContentBuilder.Write(chunk)
 				return nil
 			}),
@@ -388,7 +459,7 @@ func TestllmStreaming() {
 				// Decide how to handle this error, perhaps continue to next user input
 				continue
 			}
-			logger.Get().Info().Msgf("Added AI message with tool call requests to memory. Content: '%s', ToolCalls: %d", aiMessageWithToolCallRequests.Content, len(aiMessageWithToolCallRequests.ToolCalls))
+			// logger.Get().Debug().Msgf("Added AI message with tool call requests to memory. Content: '%s', ToolCalls: %d", aiMessageWithToolCallRequests.Content, len(aiMessageWithToolCallRequests.ToolCalls))
 
 			// 3. Now, iterate and handle each tool call.
 			for _, toolCall := range llmResponse.Choices[0].ToolCalls {

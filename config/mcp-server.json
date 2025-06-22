@@ -1,24 +1,14 @@
 [
-	{
-		"name": "fetch",
-		"type": "stdio",
-		"command": "uvx",
-		"args": ["mcp-server-fetch"]
-	},
-	{
-		"name": "github",
-		"type": "stdio",
-		"command": "docker",
-		"args": [
-			"run",
-			"-i",
-			"--rm",
-			"-e",
-			"GITHUB_PERSONAL_ACCESS_TOKEN",
-			"swr.cn-north-4.myhuaweicloud.com/ddn-k8s/ghcr.io/github/github-mcp-server:latest"
-		],
-		"env": {
-			"GITHUB_PERSONAL_ACCESS_TOKEN": "${PAT}"
-		}
-	}
+    {
+        "name": "fetch",
+        "type": "stdio",
+        "command": "uvx",
+        "args": ["mcp-server-fetch", "--ignore-robots-txt"]
+    },
+
+    {
+        "name": "github",
+        "type": "sse",
+        "baseUrl": "https://mcp.api-inference.modelscope.net/c47241a76e3a41/sse"
+    }
 ]
