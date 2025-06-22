@@ -113,7 +113,7 @@ func ExampleFetchTool() {
 	defer client.Close()
 
 	// 准备请求参数
-	args := map[string]interface{}{
+	args := map[string]any{
 		"url": "https://mcp-go.dev/clients/operations",
 	}
 
