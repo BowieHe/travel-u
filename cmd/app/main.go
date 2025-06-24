@@ -7,6 +7,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/BowieHe/travel-u/internal/llm"
 	"github.com/BowieHe/travel-u/internal/service"
 	"github.com/BowieHe/travel-u/pkg/logger"
 	"github.com/BowieHe/travel-u/pkg/utils"
@@ -28,7 +29,7 @@ func main() {
 
 	utils.LoadEnv() // 假设这个不需要 appCtx
 
-	debug := flag.Bool("debug", true, "Run the code in debug mode")
+	debug := flag.Bool("debug", false, "Run the code in debug mode")
 	flag.Parse()
 	logger.Init(*debug)
 	// Initialize MCP Clients
@@ -42,7 +43,8 @@ func main() {
 	// ExampleFetchTool()
 	// fmt.Println("finish test ")
 	// service.Testllm()
-	service.TestllmStreaming()
+	// service.TestllmStreaming()
+	llm.StartChatCLI(cancelApp)
 	// prompt := "What would be a good company name for a company that makes colorful socks?"
 	// completion, err := ll.GenerateFromSinglePrompt(appCtx, llm, prompt)
 	// if err != nil {
