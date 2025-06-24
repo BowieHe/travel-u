@@ -2,7 +2,6 @@ package llm
 
 import (
 	"bufio"
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -109,27 +108,34 @@ var HandleToolCallAndRespond = func(ctx context.Context, toolCall llms.ToolCall,
 	var finalResponseBuilder strings.Builder
 	// Stream the final response from the LLM.
 	streamingProcessor := createStreamingProcessor(&finalResponseBuilder)
-	_, err = llm.GenerateContent(ctx, messagesForLLM,
+	llmResponse, err := llm.GenerateContent(ctx, messagesForLLM,
 		llms.WithStreamingFunc(streamingProcessor),
-		// Note: We don't provide tools here again, as the goal is to get a final summary.
-		// If the model were to call a tool again, it could lead to loops.
 	)
 	if err != nil {
 		logger.Get().Error().Err(err).Msg("LLM GenerateContent failed after tool call")
 		fmt.Printf("\nError from LLM after tool call: %v\n", err)
 		return fmt.Errorf("LLM GenerateContent failed after tool call: %w", err)
 	}
-	// The streaming processor now handles all output and accumulation.
-	// The debug block is no longer necessary.
 	fmt.Println()
 
-	finalAIResponse := finalResponseBuilder.String()
-	aiMsg := llms.AIChatMessage{Content: finalAIResponse}
+	// The authoritative response comes from the return value, not the stream builder.
+	// The stream is for display purposes.
+	if llmResponse == nil || len(llmResponse.Choices) == 0 {
+		logger.Get().Warn().Msg("LLM response was empty after tool call, nothing to save to memory.")
+		return nil
+	}
+
+	choice := llmResponse.Choices[0]
+	aiMsg := llms.AIChatMessage{
+		Content:          choice.Content,
+		ToolCalls:        choice.ToolCalls,
+		ReasoningContent: choice.ReasoningContent,
+	}
 	if err := chatMemory.ChatHistory.AddMessage(ctx, aiMsg); err != nil {
 		logger.Get().Error().Err(err).Msg("Failed to add final AI response to chat memory")
 		return fmt.Errorf("failed to add final AI response to memory: %w", err)
 	}
-	logger.Get().Debug().Msgf("Added final AI response to memory: %s", finalAIResponse)
+	logger.Get().Debug().Msgf("Added final AI response to memory: %s", choice.Content)
 	return nil
 }
 
@@ -156,7 +162,6 @@ func StartChatCLI(cancel context.CancelFunc) {
 		if userInput == "quit" {
 			cancel()
 			return
-			// break
 		}
 		if userInput == "" {
 			continue
@@ -238,34 +243,6 @@ func StartChatCLI(cancel context.CancelFunc) {
 			continue
 		}
 
-		// --- Start of Debug Block ---
-		// Marshal the response to JSON to properly inspect its contents, especially slices of pointers.
-		// todo)) delete, for debug output only
-		if llmResponse != nil && len(llmResponse.Choices) > 0 {
-			// Create a serializable representation to see the full content.
-			// We dereference the pointers from the Choices slice.
-			serializableChoices := make([]llms.ContentChoice, 0, len(llmResponse.Choices))
-			for _, choicePtr := range llmResponse.Choices {
-				if choicePtr != nil {
-					serializableChoices = append(serializableChoices, *choicePtr)
-				}
-			}
-			debugOutput := struct {
-				Choices []llms.ContentChoice `json:"choices"`
-			}{
-				Choices: serializableChoices,
-			}
-
-			jsonData, err := json.MarshalIndent(debugOutput, "", "  ")
-			if err != nil {
-				fmt.Println("Error marshaling llmResponse for debugging:", err)
-			} else {
-				fmt.Println("--- Full LLM Response ---")
-				fmt.Println(string(jsonData))
-				fmt.Println("-------------------------")
-			}
-		}
-		// --- End of Debug Block ---
 		if len(llmResponse.Choices) == 0 {
 			logger.Get().Error().Msg("LLM response was empty")
 			fmt.Println("LLM returned an empty response.")
@@ -274,12 +251,10 @@ func StartChatCLI(cancel context.CancelFunc) {
 
 		choice := llmResponse.Choices[0]
 
-		// After the content stream is finished, print the reasoning content if it exists.
 		if choice.ReasoningContent != "" {
 			fmt.Printf("\n[思考中]... %s\n", choice.ReasoningContent)
 		}
 
-		// Add the complete AI message (with content and any tool calls) to history.
 		aiMessageToSave := llms.AIChatMessage{
 			Content:          choice.Content,
 			ToolCalls:        choice.ToolCalls,
@@ -291,56 +266,31 @@ func StartChatCLI(cancel context.CancelFunc) {
 		}
 		logger.Get().Debug().Msgf("Added AI message to memory. Content: '%s', ToolCalls: %d", choice.Content, len(choice.ToolCalls))
 
-		// If there are tool calls, execute them.
 		if len(choice.ToolCalls) > 0 {
-			// The introductory message (if any) has already been streamed.
-			// Now we execute the tools.
 			for _, toolCall := range choice.ToolCalls {
-				if err := HandleToolCallAndRespond(ctx, toolCall, llm, chatMemory); err != nil { // Note: llm is passed through
+				if err := HandleToolCallAndRespond(ctx, toolCall, llm, chatMemory); err != nil {
 					logger.Get().Error().Err(err).Msgf("Error handling tool call ID %s", toolCall.ID)
 					fmt.Printf("Error processing tool call: %v\n", err)
 				}
 			}
 		}
-		// If there are no tool calls, the interaction for this turn is complete.
-		// The response has already been streamed and saved to history.
 	}
 }
 
 // createStreamingProcessor creates a closure that handles streaming content.
-// It attempts to decode each chunk as a ContentChoice. If it fails, it assumes
-// the chunk is a raw string and prints it. This handles both text and the
-// fragmented JSON that can appear in tool call streams.
+// This version uses a simpler, more robust heuristic.
 func createStreamingProcessor(contentBuilder *strings.Builder) func(ctx context.Context, chunk []byte) error {
-	// buffer is used to accumulate partial JSON from chunks.
-	var buffer bytes.Buffer
-
+	var buffer strings.Builder
 	return func(ctx context.Context, chunk []byte) error {
-		var choice llms.ContentChoice
-		// First, try to unmarshal the chunk directly.
-		// This will succeed for chunks that are complete JSON objects (like content updates).
-		if err := json.Unmarshal(chunk, &choice); err == nil {
-			if choice.Content != "" {
-				fmt.Print(choice.Content)
-				contentBuilder.WriteString(choice.Content)
-			}
-			// If there's a thought, print it.
-			if choice.ReasoningContent != "" {
-				fmt.Printf("\n[思考中]... %s\n", choice.ReasoningContent)
-			}
-			// We don't handle tool calls here because we get the complete list
-			// from the final GenerateContent response.
-			return nil
-		}
-
-		// If direct unmarshaling fails, it could be a text fragment or a piece of a larger JSON object.
-		// We append to a buffer to try to form a complete object.
+		// Append the new chunk to our internal buffer.
 		buffer.Write(chunk)
 
-		// Try to decode the accumulated buffer.
-		decoder := json.NewDecoder(bytes.NewReader(buffer.Bytes()))
-		if err := decoder.Decode(&choice); err == nil {
-			// Success! We formed a complete JSON object.
+		// Make a copy of the current buffer content for processing.
+		currentContent := buffer.String()
+		var choice llms.ContentChoice
+
+		// Try to unmarshal the entire buffer. If it succeeds, we have a complete JSON object.
+		if err := json.Unmarshal([]byte(currentContent), &choice); err == nil {
 			if choice.Content != "" {
 				fmt.Print(choice.Content)
 				contentBuilder.WriteString(choice.Content)
@@ -348,26 +298,21 @@ func createStreamingProcessor(contentBuilder *strings.Builder) func(ctx context.
 			if choice.ReasoningContent != "" {
 				fmt.Printf("\n[思考中]... %s\n", choice.ReasoningContent)
 			}
-			// Clear the buffer since we've successfully processed it.
+			// It was a complete object, so we can clear the buffer for the next one.
 			buffer.Reset()
-			return nil
+		} else {
+			// It's not a complete JSON object. This could be because it's fragmented, or it's plain text.
+			// We use a heuristic: if the buffer (trimmed of whitespace) doesn't start with '{',
+			// we assume it's plain text and not a JSON object in the making.
+			trimmedContent := strings.TrimSpace(currentContent)
+			if !strings.HasPrefix(trimmedContent, "{") {
+				// It's likely plain text. Print it and clear the buffer.
+				fmt.Print(currentContent)
+				contentBuilder.WriteString(currentContent)
+				buffer.Reset()
+			}
+			// Otherwise, we assume it's an incomplete JSON object and wait for more chunks to arrive.
 		}
-
-		// If we're here, the chunk is likely a raw piece of text or an incomplete JSON fragment.
-		// For the best user experience, we print it immediately.
-		// This handles the case where tool call arguments are streamed in fragments.
-		// While this might print JSON fragments, it's better than silence.
-		// The final, correct tool call data is retrieved from the llmResponse object later.
-		// A small check to avoid printing raw JSON brackets if possible.
-		trimmedChunk := bytes.TrimSpace(chunk)
-		if !(bytes.HasPrefix(trimmedChunk, []byte("[")) && bytes.HasSuffix(trimmedChunk, []byte("]"))) &&
-			!(bytes.HasPrefix(trimmedChunk, []byte("{")) && bytes.HasSuffix(trimmedChunk, []byte("}"))) {
-			fmt.Print(string(chunk))
-		}
-
-		// We still append to the content builder, as it might be part of the final textual response.
-		contentBuilder.Write(chunk)
-
 		return nil
 	}
 }

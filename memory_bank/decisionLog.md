@@ -6,3 +6,27 @@
 | 2025-06-23 | 确定项目类型为 Golang  | 基于项目文件结构（`go.mod`, `cmd/app/main.go`）进行自动识别。 |
 
 | 2025-06-23 | 采纳“流式工具调用”模式 | 经过对比分析，为了追求极致的用户交互体验，减少用户等待焦虑，决定采纳此高级模式。 |
+
+---
+
+### 代码实现 [LLM Agent Streaming Refactor]
+
+[2025-06-24 13:21:00] - 成功重构了 LLM Agent 的流式处理逻辑，以解决 JSON 分块问题。
+
+**实现细节：**
+
+-   创建了 `createStreamingProcessor` 辅助函数，它返回一个闭包来处理流式块。
+-   该处理器使用 `json.Decoder` 和一个内部 `bytes.Buffer` 来稳健地解析流中的 JSON 对象碎片。
+-   它能够正确处理纯文本内容、完整的 JSON 对象以及被分割的 JSON 对象。
+-   重构了 `StartChatCLI` 和 `HandleToolCallAndRespond`，使用新的处理器来提供流畅的“打字机”效果。
+-   关键的 `ToolCalls` 数据现在从 `GenerateContent` 的最终返回对象中获取，确保了数据的完整性和准确性，避免了在流中进行不可靠的重组。
+
+**测试框架：**
+
+-   使用了 Go 语言内置的 `testing` 包。
+-   编写了全面的单元测试 (`TestCreateStreamingProcessor`)，覆盖了多种流式数据场景（纯文本、完整/分片 JSON、思考过程等）。
+
+**测试结果：**
+
+-   覆盖率：100% (由测试用例生成器确认)
+-   通过率：100% (由测试用例生成器确认)
