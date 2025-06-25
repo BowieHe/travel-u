@@ -115,6 +115,7 @@ var ExecuteMCPTool = func(ctx context.Context, llmToolName string, argumentsJSON
 		return "", fmt.Errorf("'operation' field in tool arguments is required")
 	}
 
+	logger.Get().Debug().Msgf("Get parsed args for tool request: %+v", parsedArgs)
 	mcpClient, found := service.GetClient(parsedArgs.Resource)
 	if !found {
 		return "", fmt.Errorf("MCP client not found: %s", parsedArgs.Resource)

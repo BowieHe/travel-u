@@ -100,7 +100,9 @@ func (a *OrchestratorAgent) Execute(ctx context.Context, initialQuery string, hi
 			if err != nil {
 				return "", fmt.Errorf("failed to create transportation agent: %w", err)
 			}
-			return transportAgent.Execute(ctx, args.TaskDescription, history)
+			// todo)) delete, change to execute new function for test
+			return transportAgent.ExecuteNew(ctx, args.TaskDescription, history)
+			// return transportAgent.Execute(ctx, args.TaskDescription, history)
 		}
 	}
 

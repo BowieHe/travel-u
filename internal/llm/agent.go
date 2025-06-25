@@ -2,6 +2,7 @@ package llm
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -11,6 +12,19 @@ import (
 	"github.com/tmc/langchaingo/llms"
 	"github.com/tmc/langchaingo/memory"
 )
+
+func generateUUID() string {
+	b := make([]byte, 16)
+	_, _ = rand.Read(b) // 填充随机字节
+
+	// 设置 UUID 版本号 (v4) 和变体标识符
+	b[6] = (b[6] & 0x0f) | 0x40 // 版本4
+	b[8] = (b[8] & 0x3f) | 0x80 // 变体RFC4122
+
+	// 格式化为标准 UUID 字符串
+	return fmt.Sprintf("%x-%x-%x-%x-%x",
+		b[0:4], b[4:6], b[6:8], b[8:10], b[10:])
+}
 
 // llmContentGenerator defines an interface for generating content, making it easier to mock the LLM.
 type llmContentGenerator interface {
@@ -140,7 +154,60 @@ var HandleToolCallAndRespond = func(ctx context.Context, toolCall llms.ToolCall,
 	return nil
 }
 
+func GenerateResponseNew(ctx context.Context, llm llmContentGenerator, chatMemory *memory.ConversationBuffer, tools []llms.Tool) (*llms.ContentChoice, error) {
+	chatHistMessages, err := chatMemory.ChatHistory.Messages(ctx)
+	if err != nil {
+		logger.Get().Error().Err(err).Msg("Failed to get messages from memory for LLM call")
+		return nil, fmt.Errorf("failed to get messages from memory: %w", err)
+	}
+
+	// 2. Convert history to the format required by the LLM
+	currentMessagesForLLM := convertMessages(chatHistMessages)
+
+	// 3. Call the LLM with streaming and tools
+	// todo)) change the name to agent name
+	fmt.Print("AI: ")
+	// var llmChatRes string
+	// var toolCallCache map[string]*llms.ToolCall
+
+	handler := &OpenAIFunctionStreamHandler{}
+
+	llmResponse, err := llm.GenerateContent(ctx, currentMessagesForLLM,
+		llms.WithStreamingFunc(handler.Handle),
+		llms.WithTools(tools),
+	)
+	fmt.Println()
+
+	if err != nil {
+		logger.Get().Error().Err(err).Msg("LLM GenerateContent failed")
+		return nil, fmt.Errorf("LLM GenerateContent failed: %w", err)
+	}
+
+	logger.Get().Debug().Msgf("Print the detailed info of llm response: %+v, stop resason: %v", llmResponse, llmResponse.Choices[0].StopReason)
+
+	toolCall := []llms.ToolCall{}
+	if handler.HasFunctionCall() {
+		functionCall, err := handler.GetFunctionCall()
+		if err != nil {
+			return nil, fmt.Errorf("Failed to parse the args of Function call")
+		}
+		toolCall = append(toolCall, llms.ToolCall{
+			ID:           generateUUID(),
+			FunctionCall: functionCall,
+		})
+	}
+
+	aiMessage := llms.AIChatMessage{Content: handler.FullText, ToolCalls: toolCall}
+	if err := chatMemory.ChatHistory.AddMessage(ctx, aiMessage); err != nil {
+		logger.Get().Error().Err(err).Msg("Failed to add AI message to memory")
+		// Continue even if saving fails, as we have the response
+	}
+
+	return &llms.ContentChoice{Content: aiMessage.Content, ToolCalls: aiMessage.ToolCalls, StopReason: llmResponse.Choices[0].StopReason}, nil
+}
+
 // GenerateResponse is a reusable function that encapsulates the logic for a single turn of conversation with the LLM.
+// Deprecated: This method is deprecated. Use GenerateResponseNew instead for better type safety.
 func GenerateResponse(ctx context.Context, llm llmContentGenerator, chatMemory *memory.ConversationBuffer, tools []llms.Tool) (*llms.ContentChoice, error) {
 	// 1. Get the current conversation history
 	chatHistMessages, err := chatMemory.ChatHistory.Messages(ctx)
