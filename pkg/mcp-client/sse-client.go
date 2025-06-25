@@ -27,16 +27,16 @@ type ResilientSSEClient struct {
 	notificationChanOnce sync.Once
 }
 
-func NewResilientSSEClient(server types.MCPServer) *ResilientSSEClient {
-	if *server.Type != "sse" {
+func NewResilientSSEClient(name string, server types.McpServerOpt) *ResilientSSEClient {
+	if server.Type != "sse" {
 		return nil
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 
 	rsc := &ResilientSSEClient{
-		baseURL:          *server.BaseURL,
+		baseURL:          server.URL,
 		headers:          server.Headers,
-		name:             server.Name,
+		name:             name,
 		ctx:              ctx,
 		cancel:           cancel,
 		reconnectCh:      make(chan struct{}, 1),

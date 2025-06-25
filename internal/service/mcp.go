@@ -63,49 +63,76 @@ func InitializeMCPClients(configFile string) error {
 		return fmt.Errorf("failed to read MCP server config %s: %w", configFile, err)
 	}
 
-	var servers []types.MCPServer
+	// var servers []types.MCPServer
+	var servers types.McpServers
 	if err := json.Unmarshal(data, &servers); err != nil {
 		logger.Get().Error().Err(err).Msg("Failed to unmarshal MCP server config")
 		return fmt.Errorf("failed to unmarshal MCP server config: %w", err)
 	}
 
-	if len(servers) == 0 {
+	if len(servers.McpServers) == 0 {
 		logger.Get().Warn().Msg("No MCP servers defined in config.")
 		return nil
 	}
 
-	for _, serverConfig := range servers {
-		var client RegisteredMCPClient // Use the interface type
+	for name, opt := range servers.McpServers {
+		var client RegisteredMCPClient
 
-		if serverConfig.Type == nil {
-			logger.Get().Error().Msgf("Server type is nil for server: %s. Skipping.", serverConfig.Name)
-			continue
-		}
-		// Now it's safe to dereference serverConfig.Type
-		logger.Get().Debug().Msgf("Processing server: %s, Type: %s", serverConfig.Name, *serverConfig.Type)
-
-		switch *serverConfig.Type {
+		logger.Get().Debug().Msgf("Processing server: %s, Type: %s", name, opt.Type)
+		switch opt.Type {
 		case "stdio":
-			stdioClient := mcpclient.NewResilientStdioClient(serverConfig)
+			stdioClient := mcpclient.NewResilientStdioClient(name, opt)
 			if stdioClient != nil {
 				client = stdioClient
 			}
 		case "sse":
-			sseClient := mcpclient.NewResilientSSEClient(serverConfig)
+			sseClient := mcpclient.NewResilientSSEClient(name, opt)
 			if sseClient != nil {
 				client = sseClient
 			}
 		default:
-			logger.Get().Warn().Msgf("Unsupported MCP server type: %s for server %s", *serverConfig.Type, serverConfig.Name)
+			logger.Get().Warn().Msgf("Unsupported MCP server type: %s for server %s", opt.Type, name)
 			continue
 		}
-
 		if client != nil {
-			RegisterClient(serverConfig.Name, client)
+			RegisterClient(name, client)
 		} else {
-			logger.Get().Error().Msgf("Failed to initialize client for server: %s", serverConfig.Name)
+			logger.Get().Error().Msgf("Failed to initialize client for server: %s", name)
 		}
 	}
+
+	// for _, serverConfig := range servers {
+	// 	var client RegisteredMCPClient // Use the interface type
+
+	// 	if serverConfig.Type == nil {
+	// 		logger.Get().Error().Msgf("Server type is nil for server: %s. Skipping.", serverConfig.Name)
+	// 		continue
+	// 	}
+	// 	// Now it's safe to dereference serverConfig.Type
+	// 	logger.Get().Debug().Msgf("Processing server: %s, Type: %s", serverConfig.Name, *serverConfig.Type)
+
+	// 	switch *serverConfig.Type {
+	// 	case "stdio":
+	// 		stdioClient := mcpclient.NewResilientStdioClient(serverConfig)
+	// 		if stdioClient != nil {
+	// 			client = stdioClient
+	// 		}
+	// 	case "sse":
+	// 		sseClient := mcpclient.NewResilientSSEClient(serverConfig)
+	// 		if sseClient != nil {
+	// 			client = sseClient
+	// 		}
+	// 	default:
+	// 		logger.Get().Warn().Msgf("Unsupported MCP server type: %s for server %s", *serverConfig.Type, serverConfig.Name)
+	// 		continue
+	// 	}
+
+	// 	if client != nil {
+	// 		RegisterClient(serverConfig.Name, client)
+	// 	} else {
+	// 		logger.Get().Error().Msgf("Failed to initialize client for server: %s", serverConfig.Name)
+	// 	}
+	// }
 	logger.Get().Debug().Msg("MCP client initialization complete.")
 	return nil
 }

@@ -5,7 +5,6 @@ import (
 	"context"
 	"io"
 	"os"
-	"strings"
 	"sync"
 	"testing"
 
@@ -59,24 +58,16 @@ func (m *MockLLM) GenerateContent(ctx context.Context, messages []llms.MessageCo
 
 func TestCreateStreamingProcessor(t *testing.T) {
 	testCases := []struct {
-		name                   string
-		chunks                 [][]byte
-		expectedOutput         string
-		expectedBuilderContent string
+		name           string
+		chunks         [][]byte
+		expectedOutput string
 	}{
-		{
-			name:                   "Simple text content",
-			chunks:                 [][]byte{[]byte("Hello, "), []byte("world!")},
-			expectedOutput:         "Hello, world!",
-			expectedBuilderContent: "Hello, world!",
-		},
 		{
 			name: "Complete JSON ContentChoice in one chunk",
 			chunks: [][]byte{
 				[]byte(`{"Content":"This is a test."}`),
 			},
-			expectedOutput:         "This is a test.",
-			expectedBuilderContent: "This is a test.",
+			expectedOutput: "This is a test.",
 		},
 		{
 			name: "Fragmented JSON ContentChoice",
@@ -84,31 +75,44 @@ func TestCreateStreamingProcessor(t *testing.T) {
 				[]byte(`{"Content":"Part 1`),
 				[]byte(` of the message."}`),
 			},
-			expectedOutput:         "Part 1 of the message.",
-			expectedBuilderContent: "Part 1 of the message.",
+			expectedOutput: "Part 1 of the message.",
 		},
 		{
 			name: "Stream with ReasoningContent",
 			chunks: [][]byte{
 				[]byte(`{"Content":"Okay.","ReasoningContent":"Thinking about it."}`),
 			},
-			expectedOutput:         "Okay.\n[思考中]... Thinking about it.\n",
-			expectedBuilderContent: "Okay.",
+			expectedOutput: "Okay.\n[思考中]... Thinking about it.\n",
 		},
 		{
 			name: "Incomplete JSON is buffered and not printed",
 			chunks: [][]byte{
 				[]byte(`{"Content":"incomplete`),
 			},
-			expectedOutput:         "",
-			expectedBuilderContent: "",
+			expectedOutput: "",
+		},
+		{
+			name: "JSON with ToolCall is not printed",
+			chunks: [][]byte{
+				[]byte(`{"ToolCalls":[{"ID":"call123","Type":"function","FunctionCall":{"Name":"test_tool","Arguments":"{}"}}]}`),
+			},
+			expectedOutput: "", // Tool calls should not be printed to stdout
+		},
+		{
+			name: "Mixed stream of text and tool calls",
+			chunks: [][]byte{
+				[]byte(`{"Content":"First part. "}`),
+				[]byte(`{"ToolCalls":[{"ID":"call123","Type":"function","FunctionCall":{"Name":"test_tool","Arguments":"{}"}}]}`),
+				[]byte(`{"Content":" Second part."}`),
+			},
+			expectedOutput: "First part.  Second part.",
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			var contentBuilder strings.Builder
-			processor := createStreamingProcessor(&contentBuilder)
+			// The contentBuilder is no longer needed.
+			processor := createStreamingProcessor()
 
 			outputBuf, cleanup := redirectOutput(t)
 			defer cleanup()
@@ -122,7 +126,6 @@ func TestCreateStreamingProcessor(t *testing.T) {
 			cleanup()
 
 			assert.Equal(t, tc.expectedOutput, outputBuf.String(), "stdout should match expected output")
-			assert.Equal(t, tc.expectedBuilderContent, contentBuilder.String(), "contentBuilder should match expected content")
 		})
 	}
 }
