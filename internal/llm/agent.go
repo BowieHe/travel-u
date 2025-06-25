@@ -170,7 +170,7 @@ func GenerateResponseNew(ctx context.Context, llm llmContentGenerator, chatMemor
 	// var llmChatRes string
 	// var toolCallCache map[string]*llms.ToolCall
 
-	handler := &OpenAIFunctionStreamHandler{}
+	handler := NewOpenAIFunctionStreamHandler()
 
 	llmResponse, err := llm.GenerateContent(ctx, currentMessagesForLLM,
 		llms.WithStreamingFunc(handler.Handle),
@@ -185,19 +185,15 @@ func GenerateResponseNew(ctx context.Context, llm llmContentGenerator, chatMemor
 
 	logger.Get().Debug().Msgf("Print the detailed info of llm response: %+v, stop resason: %v", llmResponse, llmResponse.Choices[0].StopReason)
 
-	toolCall := []llms.ToolCall{}
+	var toolCalls []llms.ToolCall
 	if handler.HasFunctionCall() {
-		functionCall, err := handler.GetFunctionCall()
+		toolCalls, err = handler.GetToolCalls()
 		if err != nil {
-			return nil, fmt.Errorf("Failed to parse the args of Function call")
+			return nil, fmt.Errorf("failed to get valid tool calls: %w", err)
 		}
-		toolCall = append(toolCall, llms.ToolCall{
-			ID:           generateUUID(),
-			FunctionCall: functionCall,
-		})
 	}
 
-	aiMessage := llms.AIChatMessage{Content: handler.FullText, ToolCalls: toolCall}
+	aiMessage := llms.AIChatMessage{Content: handler.FullText, ToolCalls: toolCalls}
 	if err := chatMemory.ChatHistory.AddMessage(ctx, aiMessage); err != nil {
 		logger.Get().Error().Err(err).Msg("Failed to add AI message to memory")
 		// Continue even if saving fails, as we have the response

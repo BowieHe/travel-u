@@ -112,7 +112,10 @@ func TestCreateStreamingProcessor(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			// The contentBuilder is no longer needed.
-			processor := createStreamingProcessor()
+			finalResponse := &llms.ContentResponse{
+				Choices: []*llms.ContentChoice{{}},
+			}
+			processor := createStreamingProcessor(finalResponse)
 
 			outputBuf, cleanup := redirectOutput(t)
 			defer cleanup()
@@ -193,4 +196,108 @@ func TestHandleToolCallAndRespond(t *testing.T) {
 	aiMessage, ok := messages[3].(llms.AIChatMessage)
 	require.True(t, ok, "Fourth message should be an AIChatMessage")
 	assert.Equal(t, "Okay, I have found a flight for you. It departs at 10 AM.", aiMessage.Content)
+}
+
+// MockLLMForStream is a mock that simulates the streaming behavior by calling the streaming function.
+type MockLLMForStream struct {
+	ChunksToStream [][]byte
+	StaticResponse *llms.ContentResponse // Response returned by GenerateContent
+	GenerateError  error
+}
+
+func (m *MockLLMForStream) GenerateContent(ctx context.Context, messages []llms.MessageContent, options ...llms.CallOption) (*llms.ContentResponse, error) {
+	if m.GenerateError != nil {
+		return nil, m.GenerateError
+	}
+
+	opts := llms.CallOptions{}
+	for _, opt := range options {
+		opt(&opts)
+	}
+	streamFunc := opts.StreamingFunc
+
+	if streamFunc != nil {
+		for _, chunk := range m.ChunksToStream {
+			if err := streamFunc(ctx, chunk); err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	return m.StaticResponse, nil
+}
+
+func TestGenerateResponseNew_WithMultipleToolCalls(t *testing.T) {
+	t.Parallel()
+
+	// 1. Setup
+	ctx := context.Background()
+	chatMemory := memory.NewConversationBuffer()
+	_ = chatMemory.ChatHistory.AddMessage(ctx, llms.HumanChatMessage{Content: "Book a flight to Tokyo and a hotel there for 3 nights."})
+
+	// 2. Mock LLM Stream according to the new logic
+	mockLLM := &MockLLMForStream{
+		ChunksToStream: [][]byte{
+			// First tool call: book_flight
+			[]byte(`[{"id":"call_1","type":"function","function":{"name":"book_flight","arguments":"{\"destination\":"}}]`),
+			[]byte(`[{"function":{"arguments":"\"Tokyo\""}}]`),
+			[]byte(`[{"function":{"arguments":"}"}}]`),
+			// Second tool call: book_hotel
+			[]byte(`[{"id":"call_2","type":"function","function":{"name":"book_hotel","arguments":"{\"city\":\"Tokyo\","}}]`),
+			[]byte(`[{"function":{"arguments":"\"nights\":3"}}]`),
+			[]byte(`[{"function":{"arguments":"}"}}]`),
+		},
+		StaticResponse: &llms.ContentResponse{
+			Choices: []*llms.ContentChoice{
+				{StopReason: "tool_calls"},
+			},
+		},
+	}
+
+	// 3. Execute
+	// We don't care about the printed output in this test.
+	_, cleanup := redirectOutput(t)
+	defer cleanup()
+
+	choice, err := GenerateResponseNew(ctx, mockLLM, chatMemory, nil)
+
+	// 4. Assert
+	require.NoError(t, err)
+	require.NotNil(t, choice)
+
+	assert.Equal(t, "tool_calls", choice.StopReason)
+	assert.Empty(t, choice.Content, "Content should be empty when only tool calls are made")
+	require.Len(t, choice.ToolCalls, 2, "Should have two tool calls")
+
+	expectedToolCalls := []llms.ToolCall{
+		{
+			ID:   "call_1",
+			Type: "function",
+			FunctionCall: &llms.FunctionCall{
+				Name:      "book_flight",
+				Arguments: `{"destination":"Tokyo"}`,
+			},
+		},
+		{
+			ID:   "call_2",
+			Type: "function",
+			FunctionCall: &llms.FunctionCall{
+				Name:      "book_hotel",
+				Arguments: `{"city":"Tokyo","nights":3}`,
+			},
+		},
+	}
+
+	// Use require.Equal because the order is now guaranteed by the handler
+	require.Equal(t, expectedToolCalls, choice.ToolCalls)
+
+	// 5. Verify memory
+	messages, err := chatMemory.ChatHistory.Messages(ctx)
+	require.NoError(t, err)
+	require.Len(t, messages, 2, "Memory should have human and AI message")
+
+	aiMessage, ok := messages[1].(llms.AIChatMessage)
+	require.True(t, ok, "The second message should be an AI message")
+	assert.Empty(t, aiMessage.Content)
+	require.Equal(t, expectedToolCalls, aiMessage.ToolCalls)
 }

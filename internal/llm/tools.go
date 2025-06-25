@@ -40,16 +40,19 @@ func MCPTools() []llms.Tool {
 			continue
 		}
 
-		var toolNames []string
+		var toolDetailDescriptions []string
 		for _, tool := range tools {
-			toolNames = append(toolNames, "'"+tool.Name+"'")
+			paramDesc := formatToolParameters(tool)
+			toolDetailDescriptions = append(toolDetailDescriptions, fmt.Sprintf("'%s'%s", tool.Name, paramDesc))
 		}
-		clientToolDescriptions = append(clientToolDescriptions, fmt.Sprintf("For client '%s', available operations (tools) are: %s.", clientName, strings.Join(toolNames, ", ")))
+		// Use a semicolon to clearly separate tool descriptions.
+		clientToolDescriptions = append(clientToolDescriptions, fmt.Sprintf("For client '%s', available operations are: %s", clientName, strings.Join(toolDetailDescriptions, "; ")))
 	}
 
 	operationDescription := "The operation (MCP tool name) to call on the target MCP client. "
 	if len(clientToolDescriptions) > 0 {
-		operationDescription += strings.Join(clientToolDescriptions, " ")
+		// Use a newline for better readability in the final prompt.
+		operationDescription += "Details per client: " + strings.Join(clientToolDescriptions, ". ")
 	} else {
 		operationDescription += "No MCP clients or tools seem to be available."
 	}
@@ -139,12 +142,25 @@ var ExecuteMCPTool = func(ctx context.Context, llmToolName string, argumentsJSON
 	}
 
 	if result.IsError {
-		logger.Get().Warn().Msgf("MCP tool '%s' executed with an error flag.", parsedArgs.Operation)
+		logger.Get().Warn().Msgf("MCP tool '%s' executed with an error flag. Content: %+v", parsedArgs.Operation, result.Content)
+
+		// Parse the structured error and return a human-friendly string.
+		errorString, formatErr := formatMCPError(result.Content)
+		if formatErr != nil {
+			logger.Get().Error().Err(formatErr).Msg("Failed to format MCP error content")
+			// Fallback for unparsable errors
+			return fmt.Sprintf("Error executing tool %s: received an unparsable error response.", parsedArgs.Operation), nil
+		}
+
+		finalErrorMsg := fmt.Sprintf("Error executing tool %s: %s", parsedArgs.Operation, errorString)
+		logger.Get().Warn().Msg(finalErrorMsg)
+		return finalErrorMsg, nil
 	}
 
-	if len(result.Content) == 0 {
+	// --- Success Path ---
+	if result.Content == nil {
 		logger.Get().Info().Msgf("MCP tool '%s' executed successfully but returned no content.", parsedArgs.Operation)
-		return `{"status": "success", "content": "Tool executed but returned no data."}`, nil
+		return "Tool executed successfully with no return data.", nil
 	}
 
 	resultBytes, err := json.Marshal(result.Content)
@@ -153,11 +169,123 @@ var ExecuteMCPTool = func(ctx context.Context, llmToolName string, argumentsJSON
 		return "", fmt.Errorf("failed to marshal MCP tool result content: %w", err)
 	}
 
+	// Check for empty JSON objects like {} or null
 	if string(resultBytes) == "{}" || string(resultBytes) == "null" {
 		logger.Get().Info().Msgf("MCP tool '%s' executed successfully but returned an empty result.", parsedArgs.Operation)
-		return `{"status": "success", "content": "Tool executed but returned no data."}`, nil
+		return "Tool executed successfully with no return data.", nil
 	}
 
 	logger.Get().Debug().Msgf("MCP tool '%s' executed successfully. Result: %s", parsedArgs.Operation, string(resultBytes))
 	return string(resultBytes), nil
+}
+
+// formatToolParameters creates a human-readable description of a tool's parameters.
+func formatToolParameters(tool mcp.Tool) string {
+	properties := tool.InputSchema.Properties
+	if len(properties) == 0 {
+		return "" // No parameters defined.
+	}
+
+	requiredSet := make(map[string]bool)
+	for _, req := range tool.InputSchema.Required {
+		requiredSet[req] = true
+	}
+
+	var paramDescs []string
+	// To ensure a consistent order, we can sort the keys, which is good practice.
+	// For now, we'll iterate directly as map iteration order isn't guaranteed.
+	for name, prop := range properties {
+		propMap, ok := prop.(map[string]any)
+		if !ok {
+			continue
+		}
+
+		propType, _ := propMap["type"].(string)
+		var details []string
+		details = append(details, fmt.Sprintf("type: %s", propType))
+
+		if requiredSet[name] {
+			details = append(details, "required")
+		}
+
+		// Check for a description within the parameter schema
+		if propDesc, ok := propMap["description"].(string); ok && propDesc != "" {
+			details = append(details, fmt.Sprintf("description: '%s'", propDesc))
+		}
+
+		// Check for enum values
+		if enumVals, ok := propMap["enum"].([]any); ok && len(enumVals) > 0 {
+			var enumStrings []string
+			for _, v := range enumVals {
+				enumStrings = append(enumStrings, fmt.Sprintf("%v", v))
+			}
+			details = append(details, fmt.Sprintf("enum: [%s]", strings.Join(enumStrings, ", ")))
+		}
+
+		desc := fmt.Sprintf("'%s' (%s)", name, strings.Join(details, ", "))
+		paramDescs = append(paramDescs, desc)
+	}
+
+	if len(paramDescs) == 0 {
+		return ""
+	}
+
+	return fmt.Sprintf(" which requires parameters: { %s }", strings.Join(paramDescs, ", "))
+}
+
+// formatMCPError attempts to parse a structured error from an MCP tool call
+// and returns a single, human-readable string.
+func formatMCPError(errorData any) (string, error) {
+	if errorData == nil {
+		return "an unknown error occurred", nil
+	}
+
+	// The data is likely a map[string]any or []any representing the JSON.
+	// Marshal it to JSON bytes to have a consistent base for unmarshalling.
+	errorBytes, err := json.Marshal(errorData)
+	if err != nil {
+		return "", fmt.Errorf("could not marshal error data from MCP client: %w", err)
+	}
+
+	// Case 1: Try to parse as a map of field errors, e.g., {"fromStation": [{"message": "Required"}]}
+	// This is a common validation error format.
+	var fieldErrors map[string][]struct {
+		Message string `json:"message"`
+	}
+	if err := json.Unmarshal(errorBytes, &fieldErrors); err == nil && len(fieldErrors) > 0 {
+		var errorParts []string
+		for field, messages := range fieldErrors {
+			if len(messages) > 0 {
+				// Just take the first message for simplicity.
+				errorParts = append(errorParts, fmt.Sprintf("parameter '%s' has an error (%s)", field, messages[0].Message))
+			}
+		}
+		return strings.Join(errorParts, ", "), nil
+	}
+
+	// Case 2: Try to parse as a simple array of errors, e.g., [{"message": "Some error"}]
+	var simpleErrors []struct {
+		Message string `json:"message"`
+	}
+	if err := json.Unmarshal(errorBytes, &simpleErrors); err == nil && len(simpleErrors) > 0 {
+		var errorParts []string
+		for _, e := range simpleErrors {
+			if e.Message != "" {
+				errorParts = append(errorParts, e.Message)
+			}
+		}
+		if len(errorParts) > 0 {
+			return strings.Join(errorParts, ", "), nil
+		}
+	}
+
+	// Case 3: The error might just be a simple JSON string.
+	var strError string
+	if err := json.Unmarshal(errorBytes, &strError); err == nil && strError != "" {
+		return strError, nil
+	}
+
+	// Fallback: If it's not a recognized format, return the raw JSON.
+	// This is better than nothing and helps with debugging.
+	return fmt.Sprintf("an unspecified error occurred, details: %s", string(errorBytes)), nil
 }
