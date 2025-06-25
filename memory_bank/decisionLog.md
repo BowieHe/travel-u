@@ -30,3 +30,26 @@
 
 -   覆盖率：100% (由测试用例生成器确认)
 -   通过率：100% (由测试用例生成器确认)
+
+---
+
+### 代码实现 [LLM 工具重构]
+
+[2025-06-25 14:09:35] - 重构 `internal/llm/tools.go` 以增强工具定义并改进错误处理。
+
+**实现细节：**
+
+-   **`MCPTools`**: 修改函数以遍历 MCP 客户端，动态生成包含详细参数（名称、类型、是否必需、描述、枚举值）的工具描述，为 LLM 提供更清晰的调用指引。
+-   **`ExecuteMCPTool`**: 重写错误处理逻辑。当工具调用返回`IsError: true`时，会解析结构化的错误内容，并将其格式化为对人类和模型都友好的纯文本错误消息，避免了向 LLM 直接返回 JSON。
+-   **辅助函数**: 添加了`formatToolParameters`和`formatMCPError`两个辅助函数来分别处理工具参数的格式化和错误信息的解析。
+
+**测试框架：**
+
+-   使用 Go 语言内置的`testing`包。
+-   使用`testify/assert`和`testify/require`进行断言。
+-   通过模拟`service.McpClient`接口来隔离对外部服务的依赖。
+
+**测试结果：**
+
+-   覆盖率：通过全面的单元测试，覆盖了`MCPTools`, `ExecuteMCPTool`, `formatToolParameters`, `formatMCPError`等函数的核心逻辑，包括各种成功和失败的场景。
+-   通过率：100%
