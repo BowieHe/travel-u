@@ -1,17 +1,13 @@
 package llm
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/BowieHe/travel-u/pkg/logger"
-	"github.com/BowieHe/travel-u/pkg/model"
-	"github.com/BowieHe/travel-u/pkg/types"
 	"github.com/tmc/langchaingo/llms"
 	"github.com/tmc/langchaingo/memory"
 )
@@ -105,10 +101,15 @@ var HandleToolCallAndRespond = func(ctx context.Context, toolCall llms.ToolCall,
 	}
 
 	fmt.Print("AI: ")
-	var finalResponseBuilder strings.Builder
-	// Stream the final response from the LLM.
-	streamingProcessor := createStreamingProcessor(&finalResponseBuilder)
-	llmResponse, err := llm.GenerateContent(ctx, messagesForLLM,
+	// Initialize the final response object that the streaming processor will populate.
+	// We initialize Choices so we can safely append to Choices[0].
+	finalResponse := &llms.ContentResponse{
+		Choices: []*llms.ContentChoice{{}},
+	}
+
+	// The streaming processor populates the finalResponse object directly.
+	streamingProcessor := createStreamingProcessor(finalResponse)
+	_, err = llm.GenerateContent(ctx, messagesForLLM,
 		llms.WithStreamingFunc(streamingProcessor),
 	)
 	if err != nil {
@@ -118,14 +119,14 @@ var HandleToolCallAndRespond = func(ctx context.Context, toolCall llms.ToolCall,
 	}
 	fmt.Println()
 
-	// The authoritative response comes from the return value, not the stream builder.
-	// The stream is for display purposes.
-	if llmResponse == nil || len(llmResponse.Choices) == 0 {
+	// The finalResponse is now populated by the streaming function.
+	// We check if any choices were actually added.
+	if len(finalResponse.Choices) == 0 {
 		logger.Get().Warn().Msg("LLM response was empty after tool call, nothing to save to memory.")
 		return nil
 	}
 
-	choice := llmResponse.Choices[0]
+	choice := finalResponse.Choices[0]
 	aiMsg := llms.AIChatMessage{
 		Content:          choice.Content,
 		ToolCalls:        choice.ToolCalls,
@@ -139,7 +140,122 @@ var HandleToolCallAndRespond = func(ctx context.Context, toolCall llms.ToolCall,
 	return nil
 }
 
+// GenerateResponse is a reusable function that encapsulates the logic for a single turn of conversation with the LLM.
+func GenerateResponse(ctx context.Context, llm llmContentGenerator, chatMemory *memory.ConversationBuffer, tools []llms.Tool) (*llms.ContentChoice, error) {
+	// 1. Get the current conversation history
+	chatHistMessages, err := chatMemory.ChatHistory.Messages(ctx)
+	if err != nil {
+		logger.Get().Error().Err(err).Msg("Failed to get messages from memory for LLM call")
+		return nil, fmt.Errorf("failed to get messages from memory: %w", err)
+	}
+
+	// 2. Convert history to the format required by the LLM
+	currentMessagesForLLM := convertMessages(chatHistMessages)
+
+	// 3. Call the LLM with streaming and tools
+	fmt.Print("AI: ")
+	// Initialize the final response object that the streaming processor will populate.
+	// We initialize Choices so we can safely append to Choices[0].
+	finalResponse := &llms.ContentResponse{
+		Choices: []*llms.ContentChoice{{}},
+	}
+
+	// The streaming processor populates the finalResponse object directly.
+	streamingProcessor := createStreamingProcessor(finalResponse)
+	_, err = llm.GenerateContent(ctx, currentMessagesForLLM,
+		llms.WithStreamingFunc(streamingProcessor),
+		llms.WithTools(tools),
+	)
+	fmt.Println()
+
+	if err != nil {
+		logger.Get().Error().Err(err).Msg("LLM GenerateContent failed")
+		return nil, fmt.Errorf("LLM GenerateContent failed: %w", err)
+	}
+
+	// The finalResponse is now populated by the streaming function.
+	if len(finalResponse.Choices) == 0 {
+		logger.Get().Error().Msg("LLM response was empty")
+		return nil, errors.New("LLM returned an empty response")
+	}
+
+	// 4. Process and save the response
+	choice := finalResponse.Choices[0]
+	if choice.ReasoningContent != "" {
+		fmt.Printf("\n[思考中]... %s\n", choice.ReasoningContent)
+	}
+
+	aiMessageToSave := llms.AIChatMessage{
+		Content:          choice.Content,
+		ToolCalls:        choice.ToolCalls,
+		ReasoningContent: choice.ReasoningContent,
+	}
+	if err := chatMemory.ChatHistory.AddMessage(ctx, aiMessageToSave); err != nil {
+		logger.Get().Error().Err(err).Msg("Failed to add AI message to memory")
+		// Continue even if saving fails, as we have the response
+	}
+	logger.Get().Debug().Msgf("Added AI message to memory. Content: '%s', ToolCalls: %d", choice.Content, len(choice.ToolCalls))
+
+	return choice, nil
+}
+
+// convertMessages converts a slice of schema.ChatMessage to a slice of llms.MessageContent.
+func convertMessages(messages []llms.ChatMessage) []llms.MessageContent {
+	result := make([]llms.MessageContent, len(messages))
+	for i, msg := range messages {
+		switch msg.GetType() {
+		case llms.ChatMessageTypeSystem:
+			result[i] = llms.MessageContent{Role: llms.ChatMessageTypeSystem, Parts: []llms.ContentPart{llms.TextContent{Text: msg.GetContent()}}}
+		case llms.ChatMessageTypeHuman:
+			result[i] = llms.MessageContent{Role: llms.ChatMessageTypeHuman, Parts: []llms.ContentPart{llms.TextContent{Text: msg.GetContent()}}}
+		case llms.ChatMessageTypeAI:
+			aiMsg, ok := msg.(llms.AIChatMessage)
+			if !ok {
+				logger.Get().Error().Msgf("Could not cast AI message from history to llms.AIChatMessage: %+v", msg)
+				result[i] = llms.MessageContent{Role: llms.ChatMessageTypeAI, Parts: []llms.ContentPart{llms.TextContent{Text: msg.GetContent()}}}
+				continue
+			}
+			parts := []llms.ContentPart{llms.TextContent{Text: aiMsg.Content}}
+			if len(aiMsg.ToolCalls) > 0 {
+				for _, tc := range aiMsg.ToolCalls {
+					parts = append(parts, llms.ToolCall{
+						ID:   tc.ID,
+						Type: tc.Type,
+						FunctionCall: &llms.FunctionCall{
+							Name:      tc.FunctionCall.Name,
+							Arguments: tc.FunctionCall.Arguments,
+						},
+					})
+				}
+			}
+			result[i] = llms.MessageContent{Role: llms.ChatMessageTypeAI, Parts: parts}
+		case llms.ChatMessageTypeTool:
+			toolMsg, ok := msg.(llms.ToolChatMessage)
+			if !ok {
+				logger.Get().Error().Msgf("Could not cast Tool message from history to llms.ToolChatMessage: %+v", msg)
+				result[i] = llms.MessageContent{Role: llms.ChatMessageTypeTool, Parts: []llms.ContentPart{llms.TextContent{Text: msg.GetContent()}}}
+				continue
+			}
+			result[i] = llms.MessageContent{
+				Role: llms.ChatMessageTypeTool,
+				Parts: []llms.ContentPart{
+					llms.ToolCallResponse{
+						ToolCallID: toolMsg.ID,
+						Content:    toolMsg.Content,
+					},
+				},
+			}
+		default:
+			logger.Get().Warn().Msgf("Unhandled chat message type in history for LLM conversion: %s", msg.GetType())
+			result[i] = llms.MessageContent{Role: llms.ChatMessageType(msg.GetType()), Parts: []llms.ContentPart{llms.TextContent{Text: msg.GetContent()}}}
+		}
+	}
+	return result
+}
+
+/*
 // StartChatCLI starts a command-line interface for the streaming chat application.
+// This function is now simplified and primarily for testing purposes.
 func StartChatCLI(cancel context.CancelFunc) {
 	llm, err := model.GetOpenAI(types.LLMOption{})
 	if err != nil {
@@ -172,102 +288,14 @@ func StartChatCLI(cancel context.CancelFunc) {
 			continue
 		}
 
-		chatHistMessages, err := chatMemory.ChatHistory.Messages(ctx)
+		response, err := GenerateResponse(ctx, llm, chatMemory, MCPTools())
 		if err != nil {
-			logger.Get().Error().Err(err).Msg("Failed to get messages from memory for LLM call")
+			fmt.Printf("\nError from LLM: %v\n", err)
 			continue
 		}
 
-		currentMessagesForLLM := make([]llms.MessageContent, len(chatHistMessages))
-		for i, msg := range chatHistMessages {
-			switch msg.GetType() {
-			case llms.ChatMessageTypeSystem:
-				currentMessagesForLLM[i] = llms.MessageContent{Role: llms.ChatMessageTypeSystem, Parts: []llms.ContentPart{llms.TextContent{Text: msg.GetContent()}}}
-			case llms.ChatMessageTypeHuman:
-				currentMessagesForLLM[i] = llms.MessageContent{Role: llms.ChatMessageTypeHuman, Parts: []llms.ContentPart{llms.TextContent{Text: msg.GetContent()}}}
-			case llms.ChatMessageTypeAI:
-				aiMsg, ok := msg.(llms.AIChatMessage)
-				if !ok {
-					logger.Get().Error().Msgf("Could not cast AI message from history to llms.AIChatMessage: %+v", msg)
-					currentMessagesForLLM[i] = llms.MessageContent{Role: llms.ChatMessageTypeAI, Parts: []llms.ContentPart{llms.TextContent{Text: msg.GetContent()}}}
-					continue
-				}
-				parts := []llms.ContentPart{llms.TextContent{Text: aiMsg.Content}}
-				if len(aiMsg.ToolCalls) > 0 {
-					for _, tc := range aiMsg.ToolCalls {
-						parts = append(parts, llms.ToolCall{
-							ID:   tc.ID,
-							Type: tc.Type,
-							FunctionCall: &llms.FunctionCall{
-								Name:      tc.FunctionCall.Name,
-								Arguments: tc.FunctionCall.Arguments,
-							},
-						})
-					}
-				}
-				currentMessagesForLLM[i] = llms.MessageContent{Role: llms.ChatMessageTypeAI, Parts: parts}
-			case llms.ChatMessageTypeTool:
-				toolMsg, ok := msg.(llms.ToolChatMessage)
-				if !ok {
-					logger.Get().Error().Msgf("Could not cast Tool message from history to llms.ToolChatMessage: %+v", msg)
-					currentMessagesForLLM[i] = llms.MessageContent{Role: llms.ChatMessageTypeTool, Parts: []llms.ContentPart{llms.TextContent{Text: msg.GetContent()}}}
-					continue
-				}
-				currentMessagesForLLM[i] = llms.MessageContent{
-					Role: llms.ChatMessageTypeTool,
-					Parts: []llms.ContentPart{
-						llms.ToolCallResponse{
-							ToolCallID: toolMsg.ID,
-							Content:    toolMsg.Content,
-						},
-					},
-				}
-			default:
-				logger.Get().Warn().Msgf("Unhandled chat message type in history for LLM conversion: %s", msg.GetType())
-				currentMessagesForLLM[i] = llms.MessageContent{Role: llms.ChatMessageType(msg.GetType()), Parts: []llms.ContentPart{llms.TextContent{Text: msg.GetContent()}}}
-			}
-		}
-
-		fmt.Print("AI: ")
-		var streamedContentBuilder strings.Builder
-		streamingProcessor := createStreamingProcessor(&streamedContentBuilder)
-		llmResponse, err := llm.GenerateContent(ctx, currentMessagesForLLM,
-			llms.WithStreamingFunc(streamingProcessor),
-			llms.WithTools(MCPTools()),
-		)
-		fmt.Println()
-
-		if err != nil {
-			logger.Get().Error().Err(err).Msg("LLM GenerateContent failed")
-			fmt.Printf("Error from LLM: %v\n", err)
-			continue
-		}
-
-		if len(llmResponse.Choices) == 0 {
-			logger.Get().Error().Msg("LLM response was empty")
-			fmt.Println("LLM returned an empty response.")
-			continue
-		}
-
-		choice := llmResponse.Choices[0]
-
-		if choice.ReasoningContent != "" {
-			fmt.Printf("\n[思考中]... %s\n", choice.ReasoningContent)
-		}
-
-		aiMessageToSave := llms.AIChatMessage{
-			Content:          choice.Content,
-			ToolCalls:        choice.ToolCalls,
-			ReasoningContent: choice.ReasoningContent,
-		}
-		if err := chatMemory.ChatHistory.AddMessage(ctx, aiMessageToSave); err != nil {
-			logger.Get().Error().Err(err).Msg("Failed to add AI message to memory")
-			continue
-		}
-		logger.Get().Debug().Msgf("Added AI message to memory. Content: '%s', ToolCalls: %d", choice.Content, len(choice.ToolCalls))
-
-		if len(choice.ToolCalls) > 0 {
-			for _, toolCall := range choice.ToolCalls {
+		if len(response.ToolCalls) > 0 {
+			for _, toolCall := range response.ToolCalls {
 				if err := HandleToolCallAndRespond(ctx, toolCall, llm, chatMemory); err != nil {
 					logger.Get().Error().Err(err).Msgf("Error handling tool call ID %s", toolCall.ID)
 					fmt.Printf("Error processing tool call: %v\n", err)
@@ -276,43 +304,68 @@ func StartChatCLI(cancel context.CancelFunc) {
 		}
 	}
 }
+*/
 
-// createStreamingProcessor creates a closure that handles streaming content.
-// This version uses a simpler, more robust heuristic.
-func createStreamingProcessor(contentBuilder *strings.Builder) func(ctx context.Context, chunk []byte) error {
+// createStreamingProcessor creates a closure that populates a given ContentResponse from a stream.
+// It uses a buffer and character-based detection to handle mixed-content streams (text, JSON objects, JSON arrays).
+func createStreamingProcessor(finalResponse *llms.ContentResponse) func(ctx context.Context, chunk []byte) error {
 	var buffer strings.Builder
+
 	return func(ctx context.Context, chunk []byte) error {
-		// Append the new chunk to our internal buffer.
+		// 1. Append new chunk to buffer
 		buffer.Write(chunk)
 
-		// Make a copy of the current buffer content for processing.
-		currentContent := buffer.String()
-		var choice llms.ContentChoice
+		// 2. Trim buffer to check for content
+		trimmedBuffer := strings.TrimSpace(buffer.String())
 
-		// Try to unmarshal the entire buffer. If it succeeds, we have a complete JSON object.
-		if err := json.Unmarshal([]byte(currentContent), &choice); err == nil {
-			if choice.Content != "" {
-				fmt.Print(choice.Content)
-				contentBuilder.WriteString(choice.Content)
-			}
-			if choice.ReasoningContent != "" {
-				fmt.Printf("\n[思考中]... %s\n", choice.ReasoningContent)
-			}
-			// It was a complete object, so we can clear the buffer for the next one.
-			buffer.Reset()
-		} else {
-			// It's not a complete JSON object. This could be because it's fragmented, or it's plain text.
-			// We use a heuristic: if the buffer (trimmed of whitespace) doesn't start with '{',
-			// we assume it's plain text and not a JSON object in the making.
-			trimmedContent := strings.TrimSpace(currentContent)
-			if !strings.HasPrefix(trimmedContent, "{") {
-				// It's likely plain text. Print it and clear the buffer.
-				fmt.Print(currentContent)
-				contentBuilder.WriteString(currentContent)
+		// 3. If buffer is empty, do nothing
+		if trimmedBuffer == "" {
+			return nil
+		}
+
+		// 4. Judge based on the first character
+		switch trimmedBuffer[0] {
+		case '{':
+			// Attempt to parse as a JSON object (llms.ContentChoice)
+			var choice llms.ContentChoice
+			err := json.Unmarshal([]byte(trimmedBuffer), &choice)
+			if err == nil {
+				// Success: process the data
+				if choice.Content != "" {
+					fmt.Print(choice.Content)
+					finalResponse.Choices[0].Content += choice.Content
+				}
+				if len(choice.ToolCalls) > 0 {
+					finalResponse.Choices[0].ToolCalls = append(finalResponse.Choices[0].ToolCalls, choice.ToolCalls...)
+					logger.Get().Debug().Msgf("Appended %d tool calls from stream.", len(choice.ToolCalls))
+				}
+				// Clear buffer after successful processing
 				buffer.Reset()
 			}
-			// Otherwise, we assume it's an incomplete JSON object and wait for more chunks to arrive.
+		// If error, it's incomplete JSON. Do nothing and wait for the next chunk.
+
+		case '[':
+			// Attempt to parse as a JSON array ([]llms.ToolCall)
+			var toolCalls []llms.ToolCall
+			err := json.Unmarshal([]byte(trimmedBuffer), &toolCalls)
+			if err == nil {
+				// Success: process the data
+				finalResponse.Choices[0].ToolCalls = append(finalResponse.Choices[0].ToolCalls, toolCalls...)
+				logger.Get().Debug().Msgf("Appended %d tool calls from stream.", len(toolCalls))
+				// Clear buffer after successful processing
+				buffer.Reset()
+			}
+		// If error, it's incomplete JSON. Do nothing and wait for the next chunk.
+
+		default:
+			// Not starting with { or [: treat as plain text
+			content := buffer.String()
+			fmt.Print(content)
+			finalResponse.Choices[0].Content += content
+			// Clear buffer after processing
+			buffer.Reset()
 		}
+
 		return nil
 	}
 }

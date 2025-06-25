@@ -28,17 +28,18 @@ type ResilientStdioClient struct {
 	notificationChanOnce sync.Once
 }
 
-func NewResilientStdioClient(server types.MCPServer) *ResilientStdioClient {
-	if *server.Type != "stdio" {
+// func NewResilientStdioClient(server types.MCPServer) *ResilientStdioClient {
+func NewResilientStdioClient(name string, server types.McpServerOpt) *ResilientStdioClient {
+	if server.Type != "stdio" {
 		return nil
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 
 	rsc := &ResilientStdioClient{
-		command:          *server.Command,
+		command:          server.Command,
 		args:             server.Args,
 		env:              server.Env, // Assign the Env map
-		name:             server.Name,
+		name:             name,
 		ctx:              ctx,
 		cancel:           cancel,
 		restartCh:        make(chan struct{}, 1),

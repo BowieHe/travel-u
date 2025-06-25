@@ -15,9 +15,9 @@ func GetOpenAI(opts types.LLMOption) (*openai.LLM, error) {
 	llm, err := openai.New(
 		openai.WithToken(utils.GetEnv("OPENAI_API_KEY", "")),
 		// openai.WithModel("gemini-2.5-pro-preview-06-05-thinking"),
-		openai.WithModel("deepseek-reasoner"), // Ensure this model supports tool/function calling
-		// openai.WithBaseURL(utils.GetEnv("OPENAI_URL", "https://api.deepseek.com/v1/chat/completions")),
-		openai.WithBaseURL(utils.GetEnv("OPENAI_URL", "https://api.ai-wave.org")),
+		openai.WithModel("deepseek-chat"), // Ensure this model supports tool/function calling
+		openai.WithBaseURL(utils.GetEnv("OPENAI_URL", "https://api.deepseek.com/v1/chat/completions")),
+		// openai.WithBaseURL(utils.GetEnv("OPENAI_URL", "https://api.ai-wave.org")),
 
 		// openai.WithTools removed
 	)

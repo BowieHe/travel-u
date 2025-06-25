@@ -1,16 +1,20 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"flag"
+	"fmt"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 
-	"github.com/BowieHe/travel-u/internal/llm"
+	"github.com/BowieHe/travel-u/internal/agents/orchestrator"
 	"github.com/BowieHe/travel-u/internal/service"
 	"github.com/BowieHe/travel-u/pkg/logger"
 	"github.com/BowieHe/travel-u/pkg/utils"
+	"github.com/tmc/langchaingo/memory"
 )
 
 func main() {
@@ -22,9 +26,9 @@ func main() {
 	signal.Notify(signalChan, os.Interrupt, syscall.SIGTERM)
 
 	go func() {
-		sig := <-signalChan
-		logger.Get().Debug().Msgf("接收到信号: %s, 正在关闭...", sig)
-		cancelApp()
+		<-signalChan
+		logger.Get().Info().Msg("接收到中断信号，正在强制退出...")
+		os.Exit(0)
 	}()
 
 	utils.LoadEnv() // 假设这个不需要 appCtx
@@ -33,18 +37,47 @@ func main() {
 	flag.Parse()
 	logger.Init(*debug)
 	// Initialize MCP Clients
-	if err := service.InitializeMCPClients("config/mcp-server.json"); err != nil {
+	if err := service.InitializeMCPClients("config/mcp-servers.json"); err != nil {
 		logger.Get().Fatal().Err(err).Msg("Failed to initialize MCP clients")
 		// os.Exit(1) // or handle error appropriately
 	}
 
 	logger.Get().Info().Msg("应用启动中...")
 
-	// ExampleFetchTool()
-	// fmt.Println("finish test ")
-	// service.Testllm()
-	// service.TestllmStreaming()
-	llm.StartChatCLI(cancelApp)
+	// --- 新的 Agent 驱动的聊天循环 ---
+	brain, err := orchestrator.New()
+	if err != nil {
+		logger.Get().Fatal().Err(err).Msg("Failed to create brain (OrchestratorAgent)")
+	}
+	chatMemory := memory.NewConversationBuffer()
+
+	fmt.Println("Hierarchical Agent System Started! Type 'quit' to exit.")
+	scanner := bufio.NewScanner(os.Stdin)
+
+	for {
+		fmt.Print("You: ")
+		if !scanner.Scan() {
+			break
+		}
+		userInput := strings.TrimSpace(scanner.Text())
+		if userInput == "quit" {
+			cancelApp()
+			break
+		}
+		if userInput == "" {
+			continue
+		}
+
+		// 将任务交给大脑处理
+		summary, err := brain.Execute(appCtx, userInput, chatMemory)
+		if err != nil {
+			fmt.Printf("\nError from Brain: %v\n", err)
+			continue
+		}
+		fmt.Printf("\nBrain Summary: %s\n", summary)
+	}
+
+	// llm.StartChatCLI(cancelApp) // 旧的启动方式已被替换
 	// prompt := "What would be a good company name for a company that makes colorful socks?"
 	// completion, err := ll.GenerateFromSinglePrompt(appCtx, llm, prompt)
 	// if err != nil {

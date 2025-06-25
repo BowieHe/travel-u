@@ -34,3 +34,15 @@ type HTTPOptions struct {
 	Name    string            `json:"name"`
 	Headers map[string]string `json:"headers,omitempty"`
 }
+
+type McpServers struct {
+	McpServers map[string]McpServerOpt `json:"mcpServers"`
+}
+type McpServerOpt struct {
+	Type    string            `json:"type"`
+	URL     string            `json:"url"`
+	Command string            `json:"command,omitempty"`
+	Args    []string          `json:"args,omitempty"`
+	Env     map[string]string `json:"env,omitempty"`
+	Headers map[string]string `json:"headers,omitempty"`
+}
