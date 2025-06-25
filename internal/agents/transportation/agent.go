@@ -36,8 +36,64 @@ func New() (*TransportationAgent, error) {
 	}, nil
 }
 
+func (a *TransportationAgent) ExecuteNew(ctx context.Context, initialQuery string, history *memory.ConversationBuffer) (summary string, err error) {
+	fmt.Println("\n[TransportationAgent] 您好！我是您的出行专家，有什么可以帮您？")
+	fmt.Printf("[TransportationAgent] 我收到的任务是: %s\n", initialQuery)
+
+	// 将大脑传递的初始任务添加到记忆中
+	a.chatMemory.ChatHistory.AddMessage(ctx, langchainllm.SystemChatMessage{Content: "你是一个专业的出行助手，你的任务是帮助用户查询和处理与交通、票务相关的信息。请在必要时使用工具，并在信息不足时向用户提问。"})
+	a.chatMemory.ChatHistory.AddMessage(ctx, langchainllm.HumanChatMessage{Content: initialQuery})
+
+	// 启动对话循环
+	scanner := bufio.NewScanner(os.Stdin)
+	for {
+		// 1. 调用LLM获取回复或工具调用
+		response, err := llm.GenerateResponseNew(ctx, a.llm, a.chatMemory, llm.MCPTools())
+		if err != nil {
+			fmt.Printf("\n[TransportationAgent] Error: %v\n", err)
+			continue
+		}
+
+		// 2. 处理工具调用
+		if response.StopReason == "tool_calls" {
+			for _, toolCall := range response.ToolCalls {
+				if err := llm.HandleToolCallAndRespond(ctx, toolCall, a.llm, a.chatMemory); err != nil {
+					fmt.Printf("\n[TransportationAgent] Error handling tool call: %v\n", err)
+				}
+			}
+			continue // 工具调用后，再次循环让LLM根据工具结果生成回复
+		}
+
+		// 3. 如果没有工具调用，直接打印AI回复
+		fmt.Printf("AI: %s\n", response.Content)
+		a.chatMemory.ChatHistory.AddMessage(ctx, langchainllm.AIChatMessage{Content: response.Content})
+
+		// 4. 获取用户下一步输入
+		fmt.Print("You: ")
+		if !scanner.Scan() {
+			break
+		}
+		userInput := strings.TrimSpace(scanner.Text())
+		if userInput == "quit" {
+			break // 暂时用 'quit' 来结束对话并返回摘要
+		}
+		if userInput == "" {
+			continue
+		}
+		a.chatMemory.ChatHistory.AddMessage(ctx, langchainllm.HumanChatMessage{Content: userInput})
+	}
+
+	// 5. 任务完成，生成摘要
+	// TODO: 使用LLM根据完整的对话历史生成更智能的摘要
+	finalSummary := "The transportation task has been processed. A summary will be generated here in the future."
+	fmt.Printf("\n[TransportationAgent] 任务完成，正在返回摘要: %s\n", finalSummary)
+
+	return finalSummary, nil
+}
+
 // Execute 是 TransportationAgent 的主入口，实现了 agents.Agent 接口。
 // 当大脑决定将出行相关的任务委派给它时，这个方法会被调用。
+// Deprecated: This method is deprecated. Use ExecuteNew instead for better type safety.
 func (a *TransportationAgent) Execute(ctx context.Context, initialQuery string, history *memory.ConversationBuffer) (summary string, err error) {
 	fmt.Println("\n[TransportationAgent] 您好！我是您的出行专家，有什么可以帮您？")
 	fmt.Printf("[TransportationAgent] 我收到的任务是: %s\n", initialQuery)
