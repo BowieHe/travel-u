@@ -259,10 +259,11 @@ func TestGenerateResponseNew_WithMultipleToolCalls(t *testing.T) {
 	_, cleanup := redirectOutput(t)
 	defer cleanup()
 
-	choice, err := GenerateResponseNew(ctx, mockLLM, chatMemory, nil)
+	choice, interrupted, err := GenerateResponseNew(ctx, mockLLM, chatMemory, nil)
 
 	// 4. Assert
 	require.NoError(t, err)
+	require.False(t, interrupted, "Should not be interrupted in this test case")
 	require.NotNil(t, choice)
 
 	assert.Equal(t, "tool_calls", choice.StopReason)

@@ -15,6 +15,7 @@ type OpenAIFunctionStreamHandler struct {
 	ToolCalls      map[string]*llms.ToolCall
 	toolCallOrder  []string // Maintain the order of tool calls
 	lastToolCallID string   // ID of the last tool call being processed
+	Interrupted    bool     // Flag to indicate if an interruption signal is received
 }
 
 // NewOpenAIFunctionStreamHandler creates a new handler.
@@ -67,6 +68,13 @@ func (h *OpenAIFunctionStreamHandler) Handle(ctx context.Context, data []byte) e
 				Arguments: chunk.Function.Arguments,
 			},
 		}
+		// Check for the interruption signal.
+		if newToolCall.FunctionCall.Name == "ask_user_for_input" {
+			h.Interrupted = true
+			// We can potentially stop processing further chunks after an interruption.
+			// For now, we'll just set the flag.
+		}
+
 		h.ToolCalls[chunk.ID] = newToolCall
 		h.toolCallOrder = append(h.toolCallOrder, chunk.ID)
 		h.lastToolCallID = chunk.ID // Track the latest tool call
@@ -81,6 +89,11 @@ func (h *OpenAIFunctionStreamHandler) Handle(ctx context.Context, data []byte) e
 	}
 
 	return nil
+}
+
+// IsInterrupted checks if the handler has been interrupted.
+func (h *OpenAIFunctionStreamHandler) IsInterrupted() bool {
+	return h.Interrupted
 }
 
 // HasFunctionCall checks if there are any aggregated tool calls.

@@ -26,8 +26,9 @@
 			"args": ["mcp-server-time", "--local-timezone=Asia/Shanghai"]
 		},
 		"12306-mcp": {
-			"type": "sse",
-			"url": "https://mcp.api-inference.modelscope.net/55d69209ed514f/sse"
+			"type": "stdio",
+			"command": "npx",
+			"args": ["-y", "12306-mcp"]
 		},
 		"variflight": {
 			"type": "stdio",

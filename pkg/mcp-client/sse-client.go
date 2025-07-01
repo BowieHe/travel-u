@@ -48,12 +48,6 @@ func NewResilientSSEClient(name string, server types.McpServerOpt) *ResilientSSE
 	return rsc
 }
 
-// func (rsc *ResilientSSEClient) SetHeader(key, value string) {
-// 	rsc.mutex.Lock()
-// 	defer rsc.mutex.Unlock()
-// 	rsc.headers[key] = value
-// }
-
 func (rsc *ResilientSSEClient) connect() error {
 	logger.Get().Debug().Msg("connecting...")
 	rsc.mutex.Lock()
@@ -145,7 +139,7 @@ func (rsc *ResilientSSEClient) reconnectLoop() {
 			logger.Get().Debug().Msgf("[%s] Received signal on reconnectCh.", rsc.name)
 			logger.Get().Debug().Msg("Reconnecting SSE client...")
 
-			for attempt := 1; attempt <= 5; attempt++ {
+			for attempt := 1; attempt <= 3; attempt++ {
 				if err := rsc.connect(); err != nil {
 					logger.Get().Debug().Msgf("Reconnection attempt %d failed: %v", attempt, err)
 

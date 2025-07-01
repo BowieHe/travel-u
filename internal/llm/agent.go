@@ -154,11 +154,13 @@ var HandleToolCallAndRespond = func(ctx context.Context, toolCall llms.ToolCall,
 	return nil
 }
 
-func GenerateResponseNew(ctx context.Context, llm llmContentGenerator, chatMemory *memory.ConversationBuffer, tools []llms.Tool) (*llms.ContentChoice, error) {
+// GenerateResponseNew generates a response from the LLM.
+// It returns the content choice, a boolean indicating if the flow was interrupted, and an error.
+func GenerateResponseNew(ctx context.Context, llm llmContentGenerator, chatMemory *memory.ConversationBuffer, tools []llms.Tool) (*llms.ContentChoice, bool, error) {
 	chatHistMessages, err := chatMemory.ChatHistory.Messages(ctx)
 	if err != nil {
 		logger.Get().Error().Err(err).Msg("Failed to get messages from memory for LLM call")
-		return nil, fmt.Errorf("failed to get messages from memory: %w", err)
+		return nil, false, fmt.Errorf("failed to get messages from memory: %w", err)
 	}
 
 	// 2. Convert history to the format required by the LLM
@@ -180,7 +182,7 @@ func GenerateResponseNew(ctx context.Context, llm llmContentGenerator, chatMemor
 
 	if err != nil {
 		logger.Get().Error().Err(err).Msg("LLM GenerateContent failed")
-		return nil, fmt.Errorf("LLM GenerateContent failed: %w", err)
+		return nil, false, fmt.Errorf("LLM GenerateContent failed: %w", err)
 	}
 
 	logger.Get().Debug().Msgf("Print the detailed info of llm response: %+v, stop resason: %v", llmResponse, llmResponse.Choices[0].StopReason)
@@ -189,8 +191,17 @@ func GenerateResponseNew(ctx context.Context, llm llmContentGenerator, chatMemor
 	if handler.HasFunctionCall() {
 		toolCalls, err = handler.GetToolCalls()
 		if err != nil {
-			return nil, fmt.Errorf("failed to get valid tool calls: %w", err)
+			return nil, false, fmt.Errorf("failed to get valid tool calls: %w", err)
 		}
+	}
+
+	// Check for interruption after processing the stream
+	if handler.IsInterrupted() {
+		// If interrupted, we don't save the AI message yet, as it's a question.
+		// The calling function will handle the interruption.
+		// We return the tool calls so the caller can extract the question.
+		logger.Get().Info().Msg("Interruption signal 'ask_user_for_input' detected.")
+		return &llms.ContentChoice{ToolCalls: toolCalls}, true, nil
 	}
 
 	aiMessage := llms.AIChatMessage{Content: handler.FullText, ToolCalls: toolCalls}
@@ -199,7 +210,7 @@ func GenerateResponseNew(ctx context.Context, llm llmContentGenerator, chatMemor
 		// Continue even if saving fails, as we have the response
 	}
 
-	return &llms.ContentChoice{Content: aiMessage.Content, ToolCalls: aiMessage.ToolCalls, StopReason: llmResponse.Choices[0].StopReason}, nil
+	return &llms.ContentChoice{Content: aiMessage.Content, ToolCalls: aiMessage.ToolCalls, StopReason: llmResponse.Choices[0].StopReason}, false, nil
 }
 
 // GenerateResponse is a reusable function that encapsulates the logic for a single turn of conversation with the LLM.
@@ -405,6 +416,7 @@ func createStreamingProcessor(finalResponse *llms.ContentResponse) func(ctx cont
 				// Clear buffer after successful processing
 				buffer.Reset()
 			}
+
 		// If error, it's incomplete JSON. Do nothing and wait for the next chunk.
 
 		case '[':
@@ -431,4 +443,13 @@ func createStreamingProcessor(finalResponse *llms.ContentResponse) func(ctx cont
 
 		return nil
 	}
+}
+
+// ParseToolArguments is a helper function to safely parse JSON arguments of a tool call.
+func ParseToolArguments(args string, v interface{}) error {
+	if err := json.Unmarshal([]byte(args), v); err != nil {
+		logger.Get().Error().Err(err).Msgf("Failed to parse tool arguments: %s", args)
+		return fmt.Errorf("failed to parse tool arguments: %w", err)
+	}
+	return nil
 }

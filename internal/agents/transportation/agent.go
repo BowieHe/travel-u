@@ -48,13 +48,47 @@ func (a *TransportationAgent) ExecuteNew(ctx context.Context, initialQuery strin
 	scanner := bufio.NewScanner(os.Stdin)
 	for {
 		// 1. 调用LLM获取回复或工具调用
-		response, err := llm.GenerateResponseNew(ctx, a.llm, a.chatMemory, llm.MCPTools())
+		response, interrupted, err := llm.GenerateResponseNew(ctx, a.llm, a.chatMemory, llm.MCPTools())
 		if err != nil {
 			fmt.Printf("\n[TransportationAgent] Error: %v\n", err)
 			continue
 		}
 
-		// 2. 处理工具调用
+		// 2. 检查是否需要中断以等待用户输入
+		if interrupted {
+			// 寻找 ask_user_for_input 工具调用
+			var question string
+			for _, toolCall := range response.ToolCalls {
+				if toolCall.FunctionCall.Name == "ask_user_for_input" {
+					// 假设参数是一个包含 "question" 字段的JSON
+					var args struct {
+						Question string `json:"question"`
+					}
+					if err := llm.ParseToolArguments(toolCall.FunctionCall.Arguments, &args); err == nil {
+						question = args.Question
+					}
+					break
+				}
+			}
+
+			if question == "" {
+				question = "I need more information, but I couldn't form a specific question. Can you provide more details?"
+			}
+
+			// 向用户显示问题并获取输入
+			fmt.Printf("AI: %s\n", question)
+			fmt.Print("You: ")
+			if !scanner.Scan() {
+				break // End of input
+			}
+			userInput := strings.TrimSpace(scanner.Text())
+
+			// 将用户的回答添加到记忆中，然后重新开始循环
+			a.chatMemory.ChatHistory.AddMessage(ctx, langchainllm.HumanChatMessage{Content: userInput})
+			continue
+		}
+
+		// 3. 处理常规工具调用
 		if response.StopReason == "tool_calls" {
 			for _, toolCall := range response.ToolCalls {
 				if err := llm.HandleToolCallAndRespond(ctx, toolCall, a.llm, a.chatMemory); err != nil {
@@ -64,23 +98,20 @@ func (a *TransportationAgent) ExecuteNew(ctx context.Context, initialQuery strin
 			continue // 工具调用后，再次循环让LLM根据工具结果生成回复
 		}
 
-		// 3. 如果没有工具调用，直接打印AI回复
-		fmt.Printf("AI: %s\n", response.Content)
-		a.chatMemory.ChatHistory.AddMessage(ctx, langchainllm.AIChatMessage{Content: response.Content})
+		// 4. 如果没有工具调用或中断，直接打印AI回复
+		// 只有当有实际内容时才打印和添加消息
+		if response.Content != "" {
+			fmt.Printf("AI: %s\n", response.Content)
+			a.chatMemory.ChatHistory.AddMessage(ctx, langchainllm.AIChatMessage{Content: response.Content})
+		}
 
-		// 4. 获取用户下一步输入
-		fmt.Print("You: ")
-		if !scanner.Scan() {
+		// 5. 检查是否应该结束对话
+		// 在这个简单的实现中，我们假设如果LLM没有进行工具调用也没有提问，任务就完成了。
+		// 在更复杂的场景中，这里可能需要一个更明确的结束信号。
+		if response.StopReason != "tool_calls" && !interrupted {
+			fmt.Println("\n[TransportationAgent] AI has concluded its turn. Assuming task is complete.")
 			break
 		}
-		userInput := strings.TrimSpace(scanner.Text())
-		if userInput == "quit" {
-			break // 暂时用 'quit' 来结束对话并返回摘要
-		}
-		if userInput == "" {
-			continue
-		}
-		a.chatMemory.ChatHistory.AddMessage(ctx, langchainllm.HumanChatMessage{Content: userInput})
 	}
 
 	// 5. 任务完成，生成摘要

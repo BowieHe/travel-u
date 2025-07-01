@@ -111,6 +111,12 @@ var ExecuteMCPTool = func(ctx context.Context, llmToolName string, argumentsJSON
 		return "", fmt.Errorf("invalid arguments JSON for %s: %w", llmToolName, err)
 	}
 
+	// If the 'params' field was omitted in the JSON, QueryParams will be nil.
+	// We must initialize it to an empty map to ensure it serializes to `{}` instead of `null`.
+	if parsedArgs.QueryParams == nil {
+		parsedArgs.QueryParams = make(map[string]any)
+	}
+
 	if parsedArgs.Resource == "" {
 		return "", fmt.Errorf("MCP client name ('resource' field in tool arguments) is required")
 	}
