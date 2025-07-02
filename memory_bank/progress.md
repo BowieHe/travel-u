@@ -96,3 +96,31 @@ Successfully completed a major architectural refactoring. The system now dynamic
 ### Final State
 
 The project is now a fully interactive, command-line-based agent. It can dynamically load a set of (currently mocked) tools and use them to respond to user queries. The architecture is robust, extensible, and ready for the implementation of real SSE/Stdio clients.
+
+---
+
+## 2025-07-02 17:14:00
+
+**Task:** Final Bug Fixes and Configuration Cleanup
+
+**Status:** **Success**
+
+### Summary
+
+Completed the final round of debugging and configuration cleanup, addressing critical API authentication errors and project setup inconsistencies. The application is now fully operational and stable.
+
+### Sub-Task 1: Fix API Authentication Error (401)
+
+-   **Completed By:** NexusCore (via `error-debugger` mode)
+-   **Status:** **Success**
+-   **Summary:** Resolved a `401 Authentication Fails` error. The root cause was that the `apiKey` was not being passed to the `ChatOpenAI` model along with the custom `baseURL`. The fix was applied in `src/agents/orchestrator.ts` to include `apiKey: process.env.OPENAI_API_KEY` during the model's initialization, ensuring proper authentication with the custom endpoint.
+
+### Sub-Task 2: Correct `package.json` Configuration
+
+-   **Completed By:** NexusCore (via `error-debugger` mode)
+-   **Status:** **Success**
+-   **Summary:** Removed the incorrect `packageManager` field from `package.json`. This field erroneously specified `yarn`, while the project is managed by `npm`, resolving potential script and dependency management conflicts.
+
+### Final State
+
+All known bugs have been resolved, and the project configuration is now clean and consistent. The application is ready for use.

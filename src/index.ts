@@ -1,3 +1,5 @@
+import * as dotenv from "dotenv";
+dotenv.config();
 import { HumanMessage } from "@langchain/core/messages";
 import { initializeGraph } from "./graph";
 import readline from "readline";

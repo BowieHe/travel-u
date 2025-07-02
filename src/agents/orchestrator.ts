@@ -16,8 +16,12 @@ import { ChatOpenAICallOptions } from "@langchain/openai/dist/chat_models";
 
 const openAIModel = new ChatOpenAI({
     temperature: 0,
-    modelName: "gpt-4o",
+    model: "deepseek-chat",
     // verbose: true,
+    apiKey: process.env.OPENAI_API_KEY,
+    configuration: {
+        baseURL: process.env.OPENAI_URL,
+    },
 });
 
 export class Orchestrator extends RunnableAgent {
