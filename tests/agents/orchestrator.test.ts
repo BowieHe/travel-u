@@ -1,41 +1,79 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { Orchestrator } from "../../src/agents/orchestrator";
-import type { AgentState } from "../../src/state";
-import { AIMessage, HumanMessage, ToolMessage } from "@langchain/core/messages";
+import { AgentState } from "../../src/state";
+import { HumanMessage, AIMessage, ToolMessage } from "@langchain/core/messages";
+import { ToolExecutor } from "@langchain/langgraph/prebuilt";
+import { DynamicTool } from "@langchain/core/tools";
 
 describe("Orchestrator", () => {
-	it("should generate a tool call for a user request", async () => {
-		const orchestrator = new Orchestrator();
-		const initialState: AgentState = {
-			messages: [new HumanMessage("search for something")],
-			next: "Orchestrator",
-		};
+    it("should call a tool and return a ToolMessage", async () => {
+        const tool = new DynamicTool({
+            name: "test-tool",
+            description: "A test tool",
+            func: async () => "tool output",
+        });
+        const toolExecutor = new ToolExecutor({ tools: [tool] });
 
-		const result = await orchestrator.invoke(initialState);
+        const orchestrator = new Orchestrator(toolExecutor);
 
-		expect(result.messages).toHaveLength(1);
-		const resultMessage = result.messages![0];
-		expect(resultMessage).toBeInstanceOf(AIMessage);
-		expect((resultMessage as AIMessage).tool_calls).toHaveLength(1);
-		// The orchestrator should route to a specialist now
-		expect(result.next).toBe("Transportation");
-	});
+        // Mock the llm
+        const mockLlm: any = {
+            invoke: vi.fn().mockResolvedValue(
+                new AIMessage({
+                    content: "",
+                    tool_calls: [
+                        {
+                            name: "test-tool",
+                            args: {},
+                            id: "tool-call-id",
+                        },
+                    ],
+                })
+            ),
+        };
+        // @ts-ignore
+        orchestrator.llm = mockLlm;
 
-	it("should end the conversation after a tool message", async () => {
-		const orchestrator = new Orchestrator();
-		const initialState: AgentState = {
-			messages: [
-				new ToolMessage({
-					tool_call_id: "tool_123",
-					content: "some observation",
-				}),
-			],
-			next: "Orchestrator",
-		};
+        const initialState: AgentState = {
+            messages: [new HumanMessage("user input")],
+            next: "Orchestrator",
+        };
 
-		const result = await orchestrator.invoke(initialState);
+        const result = await orchestrator.invoke(initialState);
 
-		expect(result.messages).toBeUndefined();
-		expect(result.next).toBe("END");
-	});
+        expect(result.messages).toHaveLength(1);
+        expect(result.messages![0]).toBeInstanceOf(ToolMessage);
+        // @ts-ignore
+        expect(result.messages![0].content).toBe("tool output");
+        expect(result.next).toBe("Orchestrator");
+    });
+
+    it("should end if no tool is called", async () => {
+        const toolExecutor = new ToolExecutor({ tools: [] });
+        const orchestrator = new Orchestrator(toolExecutor);
+
+        // Mock the llm
+        const mockLlm: any = {
+            invoke: vi.fn().mockResolvedValue(
+                new AIMessage({
+                    content: "final answer",
+                })
+            ),
+        };
+        // @ts-ignore
+        orchestrator.llm = mockLlm;
+
+        const initialState: AgentState = {
+            messages: [new HumanMessage("user input")],
+            next: "Orchestrator",
+        };
+
+        const result = await orchestrator.invoke(initialState);
+
+        expect(result.messages).toHaveLength(1);
+        expect(result.messages![0]).toBeInstanceOf(AIMessage);
+        // @ts-ignore
+        expect(result.messages![0].content).toBe("final answer");
+        expect(result.next).toBe("END");
+    });
 });
