@@ -1,36 +1,77 @@
-# If you prefer the allow list template instead of the deny list, see community template:
-# https://github.com/github/gitignore/blob/main/community/Golang/Go.AllowList.gitignore
-#
-# Binaries for programs and plugins
-*.exe
-*.exe~
-*.dll
-*.so
-*.dylib
+# 依赖目录
+node_modules/
+pnpm-lock.yaml
 
-# Test binary, built with `go test -c`
-*.test
+# 构建输出
+dist/
+build/
+out/
+*.js
+*.js.map
+*.d.ts
 
-# Code coverage profiles and other test artifacts
-*.out
-coverage.*
-*.coverprofile
-profile.cov
+# 缓存文件
+.cache/
+.rpt2_cache/
+.parcel-cache/
 
-# Dependency directories (remove the comment below to include it)
-# vendor/
+# 测试输出
+coverage/
+.nyc_output/
+*.lcov
+junit.xml
 
-# Go workspace file
-go.work
-go.work.sum
+# 编辑器/IDE
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
 
-# env file
+# 环境变量
 .env
+.env.local
+.env.development
+.env.test
+.env.production
 
-# Editor/IDE
-# .idea/
-# .vscode/
+# 日志文件
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
 
+# 包管理器
+package-lock.json
+yarn.lock
+
+# 操作系统文件
 .DS_Store
-.roomodes
-qdrant_storage/
+Thumbs.db
+
+# 文档生成器
+docs/
+
+# TypeScript 相关
+tsconfig.tsbuildinfo
+tsconfig.test.json
+!tsconfig.json  # 但保留主配置文件
+
+# 临时文件
+*.tmp
+*.temp
+
+# LangGraph 相关的文件
+.graphs/     # 如果你保存生成的图结构
+.traces/     # 如果你保存执行轨迹
+.snapshots/  # 如果你使用快照测试
+
+# 杂项
+dist-ssr/
+*.code-workspace
+
+qdrant_storage

@@ -2,7 +2,6 @@ package llm
 
 import (
 	"context"
-	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -12,19 +11,6 @@ import (
 	"github.com/tmc/langchaingo/llms"
 	"github.com/tmc/langchaingo/memory"
 )
-
-func generateUUID() string {
-	b := make([]byte, 16)
-	_, _ = rand.Read(b) // 填充随机字节
-
-	// 设置 UUID 版本号 (v4) 和变体标识符
-	b[6] = (b[6] & 0x0f) | 0x40 // 版本4
-	b[8] = (b[8] & 0x3f) | 0x80 // 变体RFC4122
-
-	// 格式化为标准 UUID 字符串
-	return fmt.Sprintf("%x-%x-%x-%x-%x",
-		b[0:4], b[4:6], b[6:8], b[8:10], b[10:])
-}
 
 // llmContentGenerator defines an interface for generating content, making it easier to mock the LLM.
 type llmContentGenerator interface {

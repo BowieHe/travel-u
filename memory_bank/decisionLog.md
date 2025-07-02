@@ -72,3 +72,25 @@
 
 -   **优点:** 根本上解决了交互死循环问题，实现了真正的“人机协作”。
 -   **缺点:** 增加了客户端逻辑的复杂度，需要在 `stream-handler.go` 和 `agent.go` 中进行修改。
+
+---
+
+### 代码实现 [Agent 基础结构]
+
+[2025-07-02 13:16:13] - 实现了分层代理系统的核心 TypeScript 代码结构，包括共享状态和基础 Agent 定义。
+
+**实现细节：**
+
+-   **`src/state.ts`**: 定义了 `AgentState` 接口，用于在 LangGraph 节点之间传递状态。
+-   **`src/agents/base.ts`**: 定义了 `RunnableAgent` 抽象类，作为所有 Agent 的基类。
+-   **`src/agents/orchestrator.ts`**: 创建了 `Orchestrator` 类的初步实现。
+-   **`src/agents/specialist.ts`**: 创建了 `Specialist` 类的初步实现。
+
+**测试框架：**
+
+-   待定 (将由 `test-case-generator` 模式确定)
+
+**测试结果：**
+
+-   覆盖率：待测试
+-   通过率：待测试

@@ -2,12 +2,13 @@
 
 ## 推荐目录结构
 
-遵循标准的 Go 项目布局，有助于保持代码的组织性和可维护性。
+遵循标准的 Node.js/TypeScript 项目布局，有助于保持代码的组织性和可维护性。
 
--   `cmd/`: 存放项目的主应用程序代码。每个子目录对应一个可执行文件。
--   `internal/`: 存放项目内部私有的代码，不希望被其他项目导入。
--   `pkg/`: 存放可以被外部项目安全导入的公共代码。
--   `api/`: (可选) 存放 API 定义文件，如 OpenAPI/Swagger 规范或 gRPC 的 .proto 文件。
--   `configs/`: (可选) 存放配置文件模板或默认配置。
--   `scripts/`: (可选) 存放用于执行各种构建、安装、分析等操作的脚本。
--   `go.mod`: Go 模块定义文件。
+-   `src/`: 存放项目所有的 TypeScript 源代码。
+-   `dist/`: 存放由 TypeScript 编译器生成的 JavaScript 代码。
+-   `node_modules/`: 存放项目的所有依赖。
+-   `src/agents/`: 存放各类 Agent 的定义，包括 Orchestrator 和 Specialists。
+-   `src/graph/`: 存放 LangGraph 的构建和配置代码。
+-   `src/tools/`: (可选) 存放专家 Agent 使用的工具函数。
+-   `package.json`: Node.js 项目的清单文件，包含依赖和脚本信息。
+-   `tsconfig.json`: TypeScript 编译器的配置文件。
