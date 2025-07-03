@@ -1,10 +1,10 @@
-import { END, StateGraph, StateGraphArgs } from "@langchain/langgraph";
+import { START, END, StateGraph, StateGraphArgs } from "@langchain/langgraph";
 import { AgentState } from "./state";
 import { Destination } from "./agents/destination";
 import { Orchestrator } from "./agents/orchestrator";
 import { Transportation } from "./agents/transportation";
 import { BaseMessage, AIMessage } from "@langchain/core/messages";
-import { ToolExecutor } from "@langchain/langgraph/prebuilt";
+import { ToolNode } from "@langchain/langgraph/prebuilt";
 import { createMcpTools } from "./mcp/mcp-tools";
 import { DynamicTool } from "@langchain/core/tools";
 
@@ -27,9 +27,11 @@ export const initializeGraph = async () => {
         "destination_tool",
         "A tool for finding information about destinations."
     );
+
+    // todo)) tools node can be classified into different groups
     const mcpTools = await createMcpTools();
     const allTools = [transportationTool, destinationTool, ...mcpTools];
-    const toolExecutor = new ToolExecutor({ tools: allTools });
+    const toolExecutor = new ToolNode(allTools);
 
     // 2. Define agents
     const orchestrator = new Orchestrator(toolExecutor);
@@ -92,7 +94,7 @@ export const initializeGraph = async () => {
     };
 
     // 6. Add edges
-    workflow.setEntryPoint("Orchestrator");
+    workflow.addEdge(START, "Orchestrator");
     workflow.addConditionalEdges("Orchestrator", routeToNext, {
         Transportation: "Transportation",
         Destination: "Destination",

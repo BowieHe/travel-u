@@ -34,25 +34,18 @@ function askQuestion(question: string): Promise<string> {
  * @param input The input message from the user.
  */
 export async function runGraph(graph: CompiledGraph, input: string) {
-    console.log("🚀 Starting the graph stream...");
-    const stream = await graph.stream(
+    console.log("🚀 Starting the graph...");
+    const finalState = await graph.invoke(
         { messages: [new HumanMessage(input)] },
         { recursionLimit: 100 }
     );
 
-    for await (const output of stream) {
-        const [nodeName, state] = Object.entries(output)[0] as [
-            string,
-            AgentState
-        ];
-        console.log(`\n--- Output from node: ${nodeName} ---`);
-        // Print the last message in the state
-        if (state.messages && state.messages.length > 0) {
-            const lastMessage = state.messages[state.messages.length - 1];
-            console.log(lastMessage);
-        }
+    console.log("\n🏁 Graph execution finished.");
+    if (finalState.messages && finalState.messages.length > 0) {
+        const lastMessage = finalState.messages[finalState.messages.length - 1];
+        console.log("\n--- Final Result ---");
+        console.log(lastMessage.content);
     }
-    console.log("\n🏁 Graph stream finished.");
 }
 
 async function main() {

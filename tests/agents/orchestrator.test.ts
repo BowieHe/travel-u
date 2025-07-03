@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from "vitest";
 import { Orchestrator } from "../../src/agents/orchestrator";
 import { AgentState } from "../../src/state";
 import { HumanMessage, AIMessage, ToolMessage } from "@langchain/core/messages";
-import { ToolExecutor } from "@langchain/langgraph/prebuilt";
+import { ToolNode } from "@langchain/langgraph/prebuilt";
 import { DynamicTool } from "@langchain/core/tools";
 
 describe("Orchestrator", () => {
@@ -12,7 +12,7 @@ describe("Orchestrator", () => {
             description: "A test tool",
             func: async () => "tool output",
         });
-        const toolExecutor = new ToolExecutor({ tools: [tool] });
+        const toolExecutor = new ToolNode([tool]);
 
         const orchestrator = new Orchestrator(toolExecutor);
 
@@ -49,7 +49,7 @@ describe("Orchestrator", () => {
     });
 
     it("should end if no tool is called", async () => {
-        const toolExecutor = new ToolExecutor({ tools: [] });
+        const toolExecutor = new ToolNode([]);
         const orchestrator = new Orchestrator(toolExecutor);
 
         // Mock the llm
