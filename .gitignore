@@ -36,6 +36,7 @@ junit.xml
 .env.development
 .env.test
 .env.production
+**/.env
 
 # 日志文件
 *.log

@@ -15,12 +15,12 @@ import { AIMessageChunk } from "@langchain/core/messages";
 import { ChatOpenAICallOptions } from "@langchain/openai/dist/chat_models";
 
 const openAIModel = new ChatOpenAI({
-    temperature: 0,
     model: "deepseek-chat",
-    // verbose: true,
-    apiKey: process.env.OPENAI_API_KEY,
+    temperature: 0.9,
+    streamUsage: true,
     configuration: {
         baseURL: process.env.OPENAI_URL,
+        apiKey: process.env.OPENAI_API_KEY,
     },
 });
 
