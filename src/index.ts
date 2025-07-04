@@ -3,7 +3,7 @@ dotenv.config();
 import { HumanMessage } from "@langchain/core/messages";
 import { initializeGraph } from "./graph";
 import readline from "readline";
-import { AgentState } from "./state";
+import { initFromConfig } from "./mcp/mcp-client";
 
 // Create a readline interface for user input
 const rl = readline.createInterface({
@@ -49,6 +49,12 @@ export async function runGraph(graph: CompiledGraph, input: string) {
 }
 
 async function main() {
+    // 1. Initialize MCP Client Manager FIRST
+    console.log("Initializing MCP Client Manager...");
+    await initFromConfig(process.cwd(), "config", "mcp-servers.json");
+    console.log("MCP Client Manager initialized successfully.");
+
+    // 2. Then initialize the graph, which depends on the MCP tools
     console.log("Initializing graph...");
     const graph = await initializeGraph();
     console.log("Graph initialized. Welcome to the interactive agent!");

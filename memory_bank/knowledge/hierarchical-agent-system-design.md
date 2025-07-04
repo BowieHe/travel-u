@@ -30,13 +30,18 @@
 
 ## 3. 关键技术实现
 
-### 3.1. 委派机制：Function Calling
+### 3.1. 委派机制：LangGraph 条件路由 (Conditional Routing)
 
-我们将采用 **Function Calling** 作为大脑向专家委派任务的机制。
+我们采用 **LangGraph** 的图结构（Graph）和条件边（Conditional Edges）作为 Agent 之间委派和控制权转移的核心机制。
 
--   **实现**: 大脑的 LLM 会被提供一组“工具”，每个工具对应一个专家 Agent（如 `delegate_to_transportation_agent(...)`）。
--   **流程**: 大脑 LLM 决定调用某个工具后，会生成结构化的 JSON。Go 代码捕获此调用，并执行对应专家 Agent 的 `Execute` 方法。
--   **优势**: 高度结构化、可靠，且与 `langchaingo` 框架无缝集成。
+-   **实现**: 整个分层代理系统被构建为一个状态图（Stateful Graph）。`Orchestrator` (大脑) 是图的入口和中心节点。每个 `Specialist` (专家) 都是图中的一个独立节点。
+-   **流程**:
+    1.  `Orchestrator` 接收用户请求后，通过其 LLM 的工具调用（Tool Calls）能力，决定是否需要委派给某个专家。
+    2.  如果 `Orchestrator` 的输出中包含了指向特定专家的工具调用（例如，`delegate_to_transportation_agent`），图的条件路由逻辑会捕获这个信号。
+    3.  控制权通过一条条件边（Conditional Edge）从 `Orchestrator` 节点转移到对应的 `Specialist` 节点（例如，`transportation_agent` 节点）。
+-   **控制权循环与交还**:
+    -   在 `Specialist` 节点内部，它通过更新 `AgentState` 中的 `next` 字段来决定是继续执行自己的循环（例如，向用户提问、调用工具）还是完成任务。
+    -   当 `Specialist` 完成任务后，它会将 `next` 字段设置为空或指向 `Orchestrator`，从而通过图的路由将控制权交还给大脑，并附带上任务成果。
 
 ### 3.2. 指令优化：Prompt Engineering
 
@@ -44,25 +49,3 @@
 
 -   **实现**: 通过精心设计大脑的 **System Prompt**，要求它在调用专家工具前，必须结合完整的对话历史和上下文，将用户的原始请求重写为一个清晰、具体的任务描述。
 -   **示例**: 用户的模糊请求“订票去北京”，将被大脑优化为具体的指令：“用户希望查询明天从上海出发前往北京的交通票务信息。请与用户确认具体的交通方式和时间偏好，并完成查询。”
-
-## 4. 最终目录结构
-
-```
-travel-u/
-├── cmd/app/main.go
-├── internal/
-│   ├── agents/
-│   │   ├── base.go
-│   │   ├── orchestrator/
-│   │   │   └── agent.go
-│   │   ├── transportation/
-│   │   │   └── agent.go
-│   │   └── destination/
-│   │       └── agent.go
-│   ├── llm/
-│   │   └── tools.go
-│   └── service/
-│       └── mcp.go
-├── pkg/
-└── memory_bank/
-```

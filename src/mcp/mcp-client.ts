@@ -1,93 +1,173 @@
 /**
- * @file Manages communication with MCP (Model-as-a-Service Communication Protocol) servers.
+ * @file Manages communication with MCP servers using the official @modelcontextprotocol/sdk.
  *
- * This file is responsible for the client-side implementation of MCP,
- * allowing the application to interact with external language model services
- * and tools. For now, it contains a mock implementation.
+ * This file implements a manager that initializes and holds multiple active MCP clients
+ * based on a configuration file. It abstracts the client-specific logic from the rest
+ * of the application.
  */
 
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
+import * as fs from "fs";
+import * as path from "path";
+import { MCPConfigs, ToolDefinition } from "./types.js";
+
 /**
- * A temporary definition for a tool provided by an MCP server.
- * This will likely be replaced by an official SDK type in the future.
+ * A manager class to hold and interact with multiple MCP clients.
  */
-export interface ToolDefinition {
-    name: string;
-    description: string;
-    input_schema: {
-        type: "object";
-        properties: {
-            [key: string]: {
-                type: string;
-                description: string;
-            };
-        };
-        required: string[];
-    };
+export class McpClientManager {
+    private clients: Map<string, Client> = new Map();
+
+    /**
+     * Iterates through all registered clients, fetches their tools,
+     * and returns a single aggregated list. Tool names are prefixed
+     * with the client name to ensure uniqueness (e.g., "github_create_issue").
+     * @returns A promise that resolves to an array of unique tool definitions.
+     */
+    async listTools(): Promise<ToolDefinition[]> {
+        const allTools: ToolDefinition[] = [];
+        for (const [clientName, client] of this.clients.entries()) {
+            const clientToolsResult = await client.listTools();
+
+            console.log(`Get client tools`, clientToolsResult);
+            if (clientToolsResult && Array.isArray(clientToolsResult.tools)) {
+                for (const tool of clientToolsResult.tools) {
+                    // Ensure input_schema is a valid object, provide a default if not.
+                    const inputSchema =
+                        tool.input_schema &&
+                        typeof tool.input_schema === "object"
+                            ? tool.input_schema
+                            : { type: "object", properties: {} };
+
+                    allTools.push({
+                        name: `${clientName}_${tool.name}`,
+                        // Provide a default empty string for description if it's undefined.
+                        description: tool.description || "",
+                        input_schema: inputSchema,
+                    });
+                }
+            }
+        }
+        return allTools;
+    }
+
+    /**
+     * Calls a tool by its prefixed name. It parses the client name from the
+     * prefix and delegates the call to the correct client instance.
+     * @param prefixedToolName The name of the tool, e.g., "github_create_issue".
+     * @param args The arguments to pass to the tool.
+     * @returns A promise that resolves to the result of the tool call.
+     */
+    async callTool(prefixedToolName: string, args: any): Promise<any> {
+        const [clientName, ...toolNameParts] = prefixedToolName.split("_");
+        const originalToolName = toolNameParts.join("_");
+
+        const client = this.clients.get(clientName);
+        if (!client) {
+            throw new Error(
+                `No MCP client registered with name: ${clientName}`
+            );
+        }
+
+        console.log(
+            `Forwarding tool call '${originalToolName}' to client '${clientName}'`
+        );
+        return client.callTool({
+            name: originalToolName,
+            arguments: args,
+        });
+    }
+
+    /**
+     * Adds a client to the manager.
+     * @param name The name to register the client under.
+     * @param client The client instance.
+     */
+    registerClient(name: string, client: Client): void {
+        this.clients.set(name, client);
+        console.log(`MCP Client: Successfully registered client '${name}'.`);
+    }
+}
+
+let clientManagerInstance: McpClientManager | null = null;
+
+/**
+ * Initializes the McpClientManager by reading server configurations,
+ * creating and connecting clients, and registering them with the manager.
+ * @returns A promise that resolves to the initialized McpClientManager instance.
+ */
+
+export async function initFromConfig(
+    ...location: string[]
+): Promise<McpClientManager> {
+    const configPath = path.join(...location);
+    const configFile = fs.readFileSync(configPath, "utf-8");
+    const config: MCPConfigs = JSON.parse(configFile);
+
+    return initializeMcpClientManager(config);
+}
+export async function initializeMcpClientManager(
+    config: MCPConfigs
+): Promise<McpClientManager> {
+    if (clientManagerInstance) {
+        return clientManagerInstance;
+    }
+
+    const manager = new McpClientManager();
+    for (const [name, conf] of Object.entries(config.mcpServers)) {
+        try {
+            const client = new Client({
+                name: `${name}-client`,
+                version: "1.0.0",
+            });
+            let transport;
+
+            if (conf.type === "stdio") {
+                const realCommand =
+                    conf.command === "uvx"
+                        ? "/opt/homebrew/bin/uvx"
+                        : "/Users/BHE24/.nvm/versions/node/v22.11.0/bin/npx";
+
+                // Smartly create the environment for the child process.
+                const env = { ...(conf.env || {}) };
+                if (!env.PATH) {
+                    const systemPaths = "/usr/bin:/bin";
+                    const currentPath = process.env.PATH || "";
+                    env.PATH = `${currentPath}:${systemPaths}`;
+                }
+
+                transport = new StdioClientTransport({
+                    command: realCommand,
+                    args: conf.args,
+                    env: env,
+                });
+            } else {
+                transport = new SSEClientTransport(new URL(conf.url));
+            }
+
+            await client.connect(transport);
+            manager.registerClient(name, client);
+        } catch (error) {
+            console.error(
+                `Failed to initialize McpClientManager: ${name}:`,
+                error
+            );
+            throw error;
+        }
+    }
+
+    clientManagerInstance = manager;
+    return clientManagerInstance;
 }
 
 /**
- * Manages clients for different MCP servers.
- * For now, this is a mock implementation.
+ * Gets the singleton instance of the McpClientManager.
+ * @returns The singleton instance.
  */
-export class McpClientManager {
-    private static instance: McpClientManager;
-
-    private constructor() {
-        // Private constructor to prevent direct instantiation.
+export function getMcpClientManager(): McpClientManager {
+    if (!clientManagerInstance) {
+        throw new Error("McpClientManager not initialized.");
     }
-
-    /**
-     * Gets the singleton instance of the McpClientManager.
-     * @returns The singleton instance.
-     */
-    public static getInstance(): McpClientManager {
-        if (!McpClientManager.instance) {
-            McpClientManager.instance = new McpClientManager();
-        }
-        return McpClientManager.instance;
-    }
-
-    /**
-     * Lists the available tools from all connected MCP servers.
-     * In this mock implementation, it returns a hardcoded list.
-     * @returns A promise that resolves to an array of tool definitions.
-     */
-    async listTools(): Promise<ToolDefinition[]> {
-        console.log("MCP Client: Listing mock tools...");
-        // Mock implementation
-        const mockTools: ToolDefinition[] = [
-            {
-                name: "get_weather",
-                description: "Get the current weather in a given location",
-                input_schema: {
-                    type: "object",
-                    properties: {
-                        location: {
-                            type: "string",
-                            description:
-                                "The city and state, e.g. San Francisco, CA",
-                        },
-                    },
-                    required: ["location"],
-                },
-            },
-        ];
-        return Promise.resolve(mockTools);
-    }
-
-    /**
-     * Calls a tool on an MCP server.
-     * In this mock implementation, it just logs the call.
-     * @param toolName The name of the tool to call.
-     * @param args The arguments to pass to the tool.
-     * @returns A promise that resolves to a mock success message.
-     */
-    async callTool(toolName: string, args: any): Promise<any> {
-        console.log(`MCP Client: Calling tool '${toolName}' with args:`, args);
-        // Mock implementation
-        return Promise.resolve({
-            success: true,
-            result: `Successfully called mock tool ${toolName}.`,
-        });
-    }
+    return clientManagerInstance;
 }

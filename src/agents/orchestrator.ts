@@ -9,6 +9,24 @@ import { AIMessageChunk } from "@langchain/core/messages";
 import { BaseChatModelCallOptions } from "@langchain/core/language_models/chat_models";
 import { DeepSeek } from "@/models/deepseek";
 
+const ToolCallSchema = z.object({
+    name: z.string(),
+    args: z.record(z.unknown()),
+    id: z.string().optional(),
+});
+
+const AgentStateSchema = z.object({
+    messages: z.array(z.any()), // Can be refined based on actual message types
+    next: z
+        .union([
+            z.literal("Orchestrator"),
+            z.literal("Transportation"),
+            z.literal("Destination"),
+            z.literal("END"),
+        ])
+        .optional(),
+});
+
 export class Orchestrator extends RunnableAgent {
     private llm: Runnable<
         BaseLanguageModelInput,
@@ -20,27 +38,16 @@ export class Orchestrator extends RunnableAgent {
     constructor(toolNode: ToolNode) {
         super();
         this.toolNode = toolNode;
+        const ds = new DeepSeek();
+        const deepseek = ds.llm("deepseek-chat");
 
-        const deepseek = DeepSeek.getLLM(
-            "deepseek-reasoner",
-            process.env.OPENAI_API_KEY!,
-            process.env.OPENAI_URL!
-        );
-
-        if (!deepseek.bindTools) {
-            throw new Error(
-                "The selected LLM does not support the .bindTools() method."
-            );
-        }
-        // The modern, correct way to attach tools to a model for tool-calling
-        // is to use the .bindTools() method. This ensures the model is aware
-        // of the tools' schemas and can decide when to call them.
         this.llm = deepseek.bindTools(this.toolNode.tools);
     }
 
     public async invoke(state: AgentState): Promise<Partial<AgentState>> {
+        const validatedState = AgentStateSchema.parse(state);
         console.log("---ORCHESTRATOR---");
-        const stream = await this.llm.stream(state.messages);
+        const stream = await this.llm.stream(validatedState.messages);
 
         let finalMessage: AIMessageChunk | null = null;
         process.stdout.write("\n--- Output from node: Orchestrator ---\n");
@@ -75,31 +82,36 @@ export class Orchestrator extends RunnableAgent {
             finalMessage.tool_calls &&
             finalMessage.tool_calls.length > 0
         ) {
-            const toolInvocations = finalMessage.tool_calls.map((call) => ({
+            const validatedCalls = z
+                .array(ToolCallSchema)
+                .parse(finalMessage.tool_calls);
+            const toolInvocations = validatedCalls.map((call) => ({
                 tool: call.name,
                 toolInput: call.args,
             }));
 
             const toolMessages = await this.toolNode.batch(toolInvocations);
 
-            return {
+            const result: Partial<AgentState> = {
                 messages: [
                     ...toolMessages.map((message, i) => {
                         return new ToolMessage({
                             content: message,
-                            tool_call_id: finalMessage!.tool_calls![i].id!,
+                            tool_call_id: validatedCalls[i].id!,
                         });
                     }),
                 ],
                 next: "Orchestrator", // Loop back to orchestrator to process tool result
             };
+            return AgentStateSchema.partial().parse(result);
         }
 
         // For now, we'll just end if no tool is called.
         // A more robust implementation would handle this case better.
-        return {
+        const result: Partial<AgentState> = {
             messages: [finalMessage!],
             next: "END",
         };
+        return AgentStateSchema.partial().parse(result);
     }
 }

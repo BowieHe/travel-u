@@ -2,19 +2,18 @@ import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { BaseLLM } from "./base";
 import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
 
-export class DeepSeek extends BaseLLM {
-    public getLLM(
-        model: string,
-        apiKey: string,
-        url: string,
-        overrideConfig?: Record<string, any>
-    ): BaseChatModel {
-        const fullConfig = this.mergeConfig(url, overrideConfig);
+export class Gemini extends BaseLLM {
+    constructor(url?: string, apiKey?: string) {
+        const geminiUrl = url ? url : process.env.GEMINI_URL;
+        const geminiKey = apiKey ? apiKey : process.env.GEMINI_API_KEY;
+        super(geminiUrl, geminiKey);
+    }
+
+    public llm(model: string): ChatGoogleGenerativeAI {
         return new ChatGoogleGenerativeAI({
-            ...fullConfig,
             model: model,
-            apiKey: apiKey,
-            baseUrl: url,
+            apiKey: this.apiKey,
+            baseUrl: this.url,
         });
     }
 }

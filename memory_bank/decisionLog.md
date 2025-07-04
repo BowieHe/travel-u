@@ -1,158 +1,71 @@
-# 决策日志
+# 架构决策日志 (精炼版)
 
-| 日期       | 决策                   | 理由                                                          |
-| ---------- | ---------------------- | ------------------------------------------------------------- |
-| 2025-06-23 | 初始化项目 Memory Bank | 为了更好地管理项目知识、跟踪进度和记录决策。                  |
-| 2025-06-23 | 确定项目类型为 Golang  | 基于项目文件结构（`go.mod`, `cmd/app/main.go`）进行自动识别。 |
+本日志记录了项目从初期探索到当前 TypeScript + LangGraph 架构演进过程中的核心设计决策。
 
-| 2025-06-23 | 采纳“流式工具调用”模式 | 经过对比分析，为了追求极致的用户交互体验，减少用户等待焦虑，决定采纳此高级模式。 |
+## 核心架构模式
 
----
-
-### 代码实现 [LLM Agent Streaming Refactor]
-
-[2025-06-24 13:21:00] - 成功重构了 LLM Agent 的流式处理逻辑，以解决 JSON 分块问题。
-
-**实现细节：**
-
--   创建了 `createStreamingProcessor` 辅助函数，它返回一个闭包来处理流式块。
--   该处理器使用 `json.Decoder` 和一个内部 `bytes.Buffer` 来稳健地解析流中的 JSON 对象碎片。
--   它能够正确处理纯文本内容、完整的 JSON 对象以及被分割的 JSON 对象。
--   重构了 `StartChatCLI` 和 `HandleToolCallAndRespond`，使用新的处理器来提供流畅的“打字机”效果。
--   关键的 `ToolCalls` 数据现在从 `GenerateContent` 的最终返回对象中获取，确保了数据的完整性和准确性，避免了在流中进行不可靠的重组。
-
-**测试框架：**
-
--   使用了 Go 语言内置的 `testing` 包。
--   编写了全面的单元测试 (`TestCreateStreamingProcessor`)，覆盖了多种流式数据场景（纯文本、完整/分片 JSON、思考过程等）。
-
-**测试结果：**
-
--   覆盖率：100% (由测试用例生成器确认)
--   通过率：100% (由测试用例生成器确认)
+| 决策日期   | 核心决策                          | 理由与价值                                                                                                              |
+| ---------- | --------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| 2025-06-23 | **采纳“流式工具调用”模式**        | 为了追求极致的用户交互体验，通过实时反馈减少用户等待焦虑，实现类似“打字机”的输出效果。                                  |
+| 2025-07-01 | **设计“交互式中断循环”机制**      | 解决了 AI 在需要信息时无法暂停等待用户输入的痛点，通过 `ask_user_for_input` 信令实现了真正的人机协作循环。              |
+| 2025-07-04 | **实现“专家 Agent 交互式子循环”** | 赋予专家 Agent 独立与用户进行多轮对话的能力，通过动态路由（节点自循环）增强了系统的模块化、自治性和处理复杂任务的能力。 |
 
 ---
 
-### 代码实现 [LLM 工具重构]
+## 关键实现与决策详情
 
-[2025-06-25 14:09:35] - 重构 `internal/llm/tools.go` 以增强工具定义并改进错误处理。
+### 架构决策 [专家 Agent 交互式子循环]
 
-**实现细节：**
+**日期:** 2025-07-04
 
--   **`MCPTools`**: 修改函数以遍历 MCP 客户端，动态生成包含详细参数（名称、类型、是否必需、描述、枚举值）的工具描述，为 LLM 提供更清晰的调用指引。
--   **`ExecuteMCPTool`**: 重写错误处理逻辑。当工具调用返回`IsError: true`时，会解析结构化的错误内容，并将其格式化为对人类和模型都友好的纯文本错误消息，避免了向 LLM 直接返回 JSON。
--   **辅助函数**: 添加了`formatToolParameters`和`formatMCPError`两个辅助函数来分别处理工具参数的格式化和错误信息的解析。
+**背景与问题:**
+原有的图结构是一个严格的、由 `Orchestrator` 驱动的单向分发模型。专家 Agent 在被调用后，控制权会立即强制性地返回给 `Orchestrator`。这种设计使得专家 Agent 无法独立地与用户进行连续的多轮对话来澄清复杂任务，限制了系统的整体智能。
 
-**测试框架：**
+**解决方案:**
+采纳“交互式子图”或“节点自循环”的架构模式。
 
--   使用 Go 语言内置的`testing`包。
--   使用`testify/assert`和`testify/require`进行断言。
--   通过模拟`service.McpClient`接口来隔离对外部服务的依赖。
+1.  **动态条件边:** 移除了从专家节点到 `Orchestrator` 的无条件边，替换为依赖于 `AgentState` 中 `next` 字段的条件边。
+2.  **动态路由逻辑:**
+    -   **循环:** 若专家 Agent 判断任务未完成，则将 `next` 设为自身节点名，形成交互循环。
+    -   **退出:** 若任务完成，则将 `next` 设为 `Orchestrator`，将控制权交还。
+3.  **增强专家 Agent:** `Specialist` 基类 (`specialist.ts`) 被重构，使其能通过内部 LLM Chain 智能决策下一步路由，并更新 `next` 字段。
 
-**测试结果：**
+**收益:**
 
--   覆盖率：通过全面的单元测试，覆盖了`MCPTools`, `ExecuteMCPTool`, `formatToolParameters`, `formatMCPError`等函数的核心逻辑，包括各种成功和失败的场景。
--   通过率：100%
+-   **真正的多轮对话:** 专家 Agent 能独立完成复杂子任务。
+-   **增强的模块化:** 每个专家 Agent 成为能管理自身流程的自治单元。
+-   **提升的灵活性:** 系统能处理更复杂的真实世界场景。
 
 ---
 
-### 决策
+### 决策 [交互式中断循环机制]
 
-[2025-07-01 16:27:21] - 设计并采纳“交互式中断循环”机制
+**日期:** 2025-07-01
 
-**理由:** 当前的“单向流式工具调用”模式无法在 AI 需要信息时暂停等待用户输入，导致无效的执行循环和糟糕的用户体验。
+**理由:** 解决单向流式工具调用中，AI 无法暂停以等待用户输入的交互死循环问题。
 
 **解决方案:**
 
 1.  **定义信令:** 引入一个特殊的工具调用 `ask_user_for_input` 作为中断信令。
-2.  **修改流程:** 客户端在处理 LLM 流时，若检测到此信令，则立即暂停执行、清空待处理的工具调用、向用户展示问题并等待输入。
-3.  **恢复循环:** 用户的回答将被作为新消息加入对话历史，并重新启动 LLM 的思考流程。
+2.  **修改流程:** 客户端检测到此信令后，暂停执行，向用户提问并等待输入。
+3.  **恢复循环:** 用户的回答将作为新消息加入对话历史，并重启 LLM 流程。
 
-**影响:**
-
--   **优点:** 根本上解决了交互死循环问题，实现了真正的“人机协作”。
--   **缺点:** 增加了客户端逻辑的复杂度，需要在 `stream-handler.go` 和 `agent.go` 中进行修改。
+**影响:** 根本上实现了“人机协作”，但略微增加了客户端逻辑的复杂度。
 
 ---
 
-### 代码实现 [Agent 基础结构]
+## TypeScript 技术栈关键实现节点
 
-[2025-07-02 13:16:13] - 实现了分层代理系统的核心 TypeScript 代码结构，包括共享状态和基础 Agent 定义。
+-   **[2025-07-02] 基础结构搭建:**
 
-**实现细节：**
+    -   实现了分层代理系统的核心 TypeScript 代码结构 (`AgentState`, `RunnableAgent`, `Orchestrator`, `Specialist`)。
+    -   实现了动态 MCP 客户端 (`mcp-client.ts`) 和工具生成器 (`mcp-tools.ts`)，并集成到 LangGraph。
+    -   将应用改造为基于 Node.js `readline` 的交互式命令行界面。
 
--   **`src/state.ts`**: 定义了 `AgentState` 接口，用于在 LangGraph 节点之间传递状态。
--   **`src/agents/base.ts`**: 定义了 `RunnableAgent` 抽象类，作为所有 Agent 的基类。
--   **`src/agents/orchestrator.ts`**: 创建了 `Orchestrator` 类的初步实现。
--   **`src/agents/specialist.ts`**: 创建了 `Specialist` 类的初步实现。
+-   **[2025-07-03] 交互体验优化:**
 
-**测试框架：**
+    -   在 `runGraph` 函数中实现了基于 `AIMessageChunk` 的“打字机”流式输出效果。
+    -   成功启用 `deepseek-reasoner` 模型的思考过程流，通过在 `ChatOpenAI` 构造函数中设置顶层 `reasoning: {}` 参数解决。
 
--   待定 (将由 `test-case-generator` 模式确定)
-
-**测试结果：**
-
--   覆盖率：待测试
--   通过率：待测试
-
----
-
-### 代码实现 [MCP Client & Interactive Graph]
-
-[2025-07-02 16:20] - Implemented a dynamic MCP client, integrated it into LangGraph with dynamic tool generation, and converted the application to an interactive CLI.
-
-**实现细节：**
-
--   **`src/mcp/mcp-client.ts`**: Created a mock `McpClientManager` to simulate fetching tool definitions from an MCP server.
--   **`src/mcp/mcp-tools.ts`**: Implemented `createMcpTools` to dynamically generate `DynamicTool` instances based on the definitions from the client.
--   **`src/agents/`**: Refactored `Orchestrator`, `Specialist`, `Transportation`, and `Destination` agents to correctly use the `ToolExecutor` and `DynamicTool` instances, separating concerns between routing and execution.
--   **`src/graph.ts`**: Modified the graph construction to initialize all tools (static and dynamic), create a `ToolExecutor`, and define a new conditional routing logic based on the orchestrator's tool calls.
--   **`src/index.ts`**: Transformed the application into an interactive command-line interface using Node.js's `readline` module, allowing for continuous user interaction.
-
-**测试框架：**
-To be generated by `test-case-generator`.
-
-**测试结果：**
-
--   覆盖率：Pending
--   通过率：Pending
-
----
-
-### 代码实现 [流式输出]
-
-[2025-07-03 12:57:10] - 实现 `runGraph` 函数的打字机流式输出效果
-
-**实现细节：**
-
--   修改了 `src/index.ts` 中的 `runGraph` 函数。
--   在处理 `LangGraph` 输出的循环中，增加了对 `AIMessageChunk` 流的判断。
--   当检测到来自 `Orchestrator` 节点的流式内容时，使用 `process.stdout.write` 逐块输出，实现了打字机效果。
--   对于非流式内容，保留了原有的 `console.log` 输出方式。
-
-**测试框架：**
-
--   使用 `vitest` 和 `vi` 进行了单元测试。
--   测试文件位于 `tests/index.test.ts`。
-
-**测试结果：**
-
--   覆盖率：100%
--   通过率：100%
-
----
-
-### 代码实现 [模型配置调试]
-
-[2025-07-03 14:10:42] - **最终修复：** 成功启用 `deepseek-reasoner` 模型的思考过程流。
-
-**实现细节：**
-经过一系列的调试（包括检查 `additional_kwargs`、`tool_call_chunks` 和 `modelKwargs`），最终通过用户洞察和 TypeScript 编译器错误，确定了正确的解决方案。我们在 `src/agents/orchestrator.ts` 的 `ChatOpenAI` 构造函数中，使用了顶层的 `reasoning: {}` 参数。这与 DeepSeek API 的要求完全吻合，成功地开启了模型的“思考”过程流。
-
-**测试框架：**
-由用户在最终运行时手动验证。
-
-**测试结果：**
-
--   覆盖率：N/A
--   通过率：成功！用户已确认在控制台看到了预期的思考过程。
+-   **[2025-07-04] 健壮性增强:**
+    -   在 Orchestrator 中引入 Zod，通过 `ToolCallSchema` 和 `AgentStateSchema` 对关键方法的输入、输出及工具调用参数进行严格验证，确保运行时数据一致性。

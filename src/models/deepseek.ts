@@ -1,22 +1,22 @@
-import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { BaseLLM } from "./base";
 import { ChatDeepSeek } from "@langchain/deepseek";
 
 export class DeepSeek extends BaseLLM {
-    public static override getLLM(
-        model: string,
-        apiKey: string,
-        url: string,
-        overrideConfig?: Record<string, any>
-    ): BaseChatModel {
-        const fullConfig = this.mergeConfig(url, overrideConfig);
+    // private url?: string;
+    // private apiKey?: string;
+
+    constructor(url?: string, apiKey?: string) {
+        const dsUrl = url ? url : process.env.DS_URL;
+        const dsAPI = apiKey ? apiKey : process.env.DS_API_KEY;
+        super(dsUrl, dsAPI);
+    }
+
+    public llm(model: string): ChatDeepSeek {
         return new ChatDeepSeek({
-            ...fullConfig,
             model: model,
-            apiKey: apiKey,
+            apiKey: this.apiKey,
             configuration: {
-                baseURL: process.env.DEEPSEEK_API_BASE,
-                ...fullConfig?.modelSpecificConfig,
+                baseURL: this.url,
             },
         });
     }

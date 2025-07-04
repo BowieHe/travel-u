@@ -35,8 +35,11 @@ export const initializeGraph = async () => {
 
     // 2. Define agents
     const orchestrator = new Orchestrator(toolExecutor);
-    const transportationAgent = new Transportation(transportationTool);
-    const destinationAgent = new Destination(destinationTool);
+    const transportationAgent = new Transportation(
+        transportationTool,
+        "Transportation"
+    );
+    const destinationAgent = new Destination(destinationTool, "Destination");
 
     // 3. Define the graph state
     const graphState: StateGraphArgs<AgentState>["channels"] = {
@@ -61,36 +64,24 @@ export const initializeGraph = async () => {
 
     // 5. Define the routing logic
     const routeToNext = (state: AgentState) => {
+        const { next } = state;
+        return next;
+    };
+
+    // A new routing function for specialists
+    const routeToSpecialist = (state: AgentState) => {
         const lastMessage = state.messages[state.messages.length - 1];
-
         if (!(lastMessage instanceof AIMessage)) {
-            return "END"; // Should not happen in a normal flow
-        }
-
-        if (!lastMessage.tool_calls || lastMessage.tool_calls.length === 0) {
             return "END";
         }
 
-        const toolName = lastMessage.tool_calls[0].name;
-
-        // Check if it's a specialist tool
-        if (toolName === transportationTool.name) {
-            return "Transportation";
-        }
-        if (toolName === destinationTool.name) {
-            return "Destination";
-        }
-
-        // For any other tool (assumed to be an MCP tool), the Orchestrator has already
-        // executed it and is waiting for the result. The graph should loop back to the orchestrator.
-        // The orchestrator's invoke method should have returned a state with next: "Orchestrator".
-        // Let's check the 'next' field in the state to confirm.
-        if (state.next === "Orchestrator") {
+        // If there are no tool calls, the specialist is done.
+        if (!lastMessage.tool_calls || lastMessage.tool_calls.length === 0) {
             return "Orchestrator";
         }
 
-        // If it's a tool call we don't recognize, end the graph.
-        return "END";
+        // Otherwise, the specialist needs to continue.
+        return state.next;
     };
 
     // 6. Add edges
@@ -101,8 +92,18 @@ export const initializeGraph = async () => {
         Orchestrator: "Orchestrator",
         END: END,
     });
-    workflow.addEdge("Transportation", "Orchestrator");
-    workflow.addEdge("Destination", "Orchestrator");
+
+    workflow.addConditionalEdges("Transportation", routeToSpecialist, {
+        Transportation: "Transportation",
+        Orchestrator: "Orchestrator",
+        END: END,
+    });
+
+    workflow.addConditionalEdges("Destination", routeToSpecialist, {
+        Destination: "Destination",
+        Orchestrator: "Orchestrator",
+        END: END,
+    });
 
     // 7. Compile and return the graph
     const graph = workflow.compile();

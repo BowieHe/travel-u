@@ -1,181 +1,52 @@
 # Project Progress Log
 
-## 2025-06-25 14:40:00
+## Legacy Go Prototype (Pre-July 2025)
 
-**Task:** Fix critical issues with LLM streaming tool calls and subsequent API errors.
-
-**Completed By:** User & NexusCore
-
-**Role:** `code-developer` & `nexuscore`
-
-**Status:** **Success**
-
-**Time Spent:** Approximately 4 hours (cumulative over multiple sessions).
-
-### Summary
-
-Successfully resolved a complex, multi-stage bug involving LLM streaming, tool call parsing, and error handling. The initial problem manifested as garbled console output and an `insufficient tool messages` API 400 error. The debugging journey revealed and fixed several underlying issues, culminating in a robust and stable implementation.
-
-### Key Problems and Resolutions
-
-1.  **Problem: Garbled Stream & Multiple Tool Call Aggregation**
-
-    -   **Symptom:** The initial stream handler incorrectly processed a mix of plain text and multiple tool call JSON chunks, leading to concatenated arguments and parsing failures.
-    -   **Resolution (`internal/llm/stream-handler.go`):** A new `OpenAIFunctionStreamHandler` was implemented. It now uses a `map[string]*llms.ToolCall` keyed by the tool call's unique ID to correctly aggregate arguments for multiple, concurrent tool calls. An ordered slice (`toolCallOrder`) preserves the execution sequence, and `lastToolCallID` tracks the most recent tool call for appending argument chunks. This design elegantly handles the complex, mixed-content stream.
-
-2.  **Problem: Missing Tool Parameters & API 422 Errors**
-    -   **Symptom:** The LLM frequently failed to provide required parameters (e.g., `fromStation`, `toStation`), causing the MCP tool to return a detailed JSON error. This complex error object was then sent back to the LLM, resulting in an API 422 (Unprocessable Entity) error.
-    -   **Resolution (`internal/llm/tools.go`):**
-        -   **Dynamic Tool Schema Generation:** The `MCPTools` function was enhanced with a `formatToolParameters` helper. This function dynamically inspects the `InputSchema` of each registered MCP tool and generates a detailed, human-readable description of its parameters (including type, description, and if it's required). This rich context is injected into the LLM's prompt, significantly improving its ability to provide the correct arguments.
-        -   **Intelligent Error Formatting:** A new `formatMCPError` function was implemented. It intelligently parses various potential MCP error structures (e.g., field-specific validation errors, simple error messages) and formats them into a single, clean, plain-text string. This prevents the complex JSON from ever reaching the LLM, completely eliminating the 422 errors.
-
-### Final State
-
-The system is now stable. The stream handler correctly parses all tool calls, and the enhanced tool definitions and error handling prevent the common API errors previously encountered. The entire tool-calling pipeline is robust and well-documented in the code.
+-   **Summary:** The initial Go-based implementation successfully established the core concepts of the project. Key achievements included resolving complex LLM streaming and tool-calling issues, designing an interrupt mechanism for user interaction, and laying the groundwork for future development. This prototype served as a valuable proof-of-concept before the strategic pivot to a more dynamic tech stack.
 
 ---
 
-## 2025-07-01 16:28:00
+## Phase 1: Migration & Core Architecture (Early July 2025)
 
-**Task:** Analyze and resolve issues related to initial tool call errors and the lack of user interaction capabilities during AI execution.
+### 2025-07-02: Technology Stack Migration to TypeScript & LangGraph
 
-**Status:** **Success**
+-   **Milestone:** Successfully migrated the project from Go to a TypeScript-based monorepo.
+-   **Details:** Initialized the project with `npm` and integrated core dependencies, including `langchain` and `langgraph`, marking a fundamental shift in the project's technical direction.
 
-### Sub-Task 1: Diagnose and Fix Initial Tool Call Error
+### 2025-07-02: Dynamic Tool Integration Architecture
 
--   **Completed By:** NexusCore (via `error-debugger` mode)
--   **Status:** **Success**
--   **Summary:** Successfully diagnosed and fixed a critical bug where tool calls without parameters would fail. The root cause was the system sending `null` as the arguments payload instead of an empty JSON object `{}`. A patch was applied to `internal/llm/tools.go` to initialize an empty map, ensuring the correct payload is always sent.
-
-### Sub-Task 2: Design AI Interaction Interrupt Mechanism
-
--   **Completed By:** NexusCore (via `architect` mode)
--   **Status:** **Success**
--   **Summary:** Architected a new "Interactive Interrupt Loop" to solve the problem of the AI not waiting for user input. The design introduces a special tool, `ask_user_for_input`, which acts as a signal for the execution loop to pause and await user feedback. This crucial architectural decision has been documented in the `memory_bank/decisionLog.md`.
+-   **Milestone:** Architected and implemented a dynamic system for integrating MCP (Model-as-a-Service Communication Protocol) tools with the LangGraph agent.
+-   **Details:**
+    -   Decoupled agent logic from the communication protocol, a pattern documented in `memory_bank/systemPatterns.md`.
+    -   Implemented a mock `McpClientManager` and a dynamic tool generator (`src/mcp/`).
+    -   Converted the application into a fully interactive command-line tool using Node.js's `readline` module.
 
 ---
 
--   **任务名称**: 技术栈重构：迁移到 TypeScript & LangGraph
--   **描述**: 完成了从 Go 到 TypeScript 的基础项目迁移，并使用 `npm` 初始化了项目，安装了 `langchain` 和 `langgraph` 核心依赖。
--   **状态**: 成功
--   **完成者**: NexusCore (via code-developer)
--   **时间**: 2025-07-02
+## Phase 2: Stabilization & Feature Enhancement (Early-Mid July 2025)
+
+### 2025-07-03: System Stabilization and UX Improvements
+
+-   **Milestone:** Achieved a stable, feature-rich application by resolving critical bugs and enhancing the user experience.
+-   **Key Fixes & Features:**
+    -   **API Authentication:** Resolved a `401 Authentication Fails` error by ensuring the `apiKey` was correctly passed during model initialization (`src/agents/orchestrator.ts`).
+    -   **Configuration Cleanup:** Corrected the `package.json` to align with the project's `npm` package manager.
+    -   **"Typewriter" Streaming:** Implemented true "typewriter" style streaming for model responses in `src/index.ts`, significantly improving the interactive feel.
+    -   **DeepSeek Reasoner Stream:** Enabled the `deepseek-reasoner` model's "thinking" process stream by correctly configuring the `reasoning: {}` parameter in `src/agents/orchestrator.ts`.
+
+### 2025-07-04: Enhanced Reliability with Zod Validation
+
+-   **Milestone:** Increased application robustness by integrating Zod for schema validation.
+-   **Details:** Implemented strict input, tool call, and output state validation within the Orchestrator agent, catching potential data errors early without compromising existing functionality.
 
 ---
 
-## 2025-07-02 16:47:00
+## Phase 3: Advanced Agent Capabilities (Mid July 2025)
 
-**Task:** Architect and Implement Dynamic MCP Tool Integration with LangGraph
+### 2025-07-04: Interactive Multi-Turn Conversations
 
-**Status:** **Success**
-
-### Summary
-
-Successfully completed a major architectural refactoring. The system now dynamically discovers and integrates tools from external MCP (Model-as-a-Service Communication Protocol) servers, making them available to the `LangGraph` agent. The application has also been converted into a fully interactive command-line tool. This marks a significant evolution from the previous Go implementation, leveraging the full power of `LangGraph` for dynamic tool calling.
-
-### Sub-Task 1: Architecture & Memory Bank Update
-
--   **Completed By:** NexusCore
--   **Role:** `architect`
--   **Status:** **Success**
--   **Summary:** Designed a new system pattern, "Dynamic MCP Tool Integration," which decouples the agent's logic from the underlying communication protocol. This pattern, along with updated product goals, has been formally documented in `memory_bank/systemPatterns.md` and `memory_bank/productContext.md`.
-
-### Sub-Task 2: Code Implementation & Refactoring
-
--   **Completed By:** NexusCore (via `code-developer` mode)
--   **Role:** `code-developer`
--   **Status:** **Success**
--   **Summary:**
-    -   Created a new `src/mcp/` directory to house all MCP-related logic.
-    -   Implemented a mock `McpClientManager` in `src/mcp/mcp-client.ts` to simulate `listTools` and `callTool` functionalities.
-    -   Implemented a dynamic tool generator in `src/mcp/mcp-tools.ts` that creates `LangGraph` tools based on the client's output.
-    -   Integrated the dynamic tools into the main graph in `src/graph.ts`.
-    -   Refactored `src/index.ts` to use Node.js's `readline` module, enabling a persistent, interactive user session.
-    -   Added comprehensive unit tests for all new modules, ensuring the reliability of the new architecture.
-
-### Final State
-
-The project is now a fully interactive, command-line-based agent. It can dynamically load a set of (currently mocked) tools and use them to respond to user queries. The architecture is robust, extensible, and ready for the implementation of real SSE/Stdio clients.
-
----
-
-## 2025-07-02 17:14:00
-
-**Task:** Final Bug Fixes and Configuration Cleanup
-
-**Status:** **Success**
-
-### Summary
-
-Completed the final round of debugging and configuration cleanup, addressing critical API authentication errors and project setup inconsistencies. The application is now fully operational and stable.
-
-### Sub-Task 1: Fix API Authentication Error (401)
-
--   **Completed By:** NexusCore (via `error-debugger` mode)
--   **Status:** **Success**
--   **Summary:** Resolved a `401 Authentication Fails` error. The root cause was that the `apiKey` was not being passed to the `ChatOpenAI` model along with the custom `baseURL`. The fix was applied in `src/agents/orchestrator.ts` to include `apiKey: process.env.OPENAI_API_KEY` during the model's initialization, ensuring proper authentication with the custom endpoint.
-
-### Sub-Task 2: Correct `package.json` Configuration
-
--   **Completed By:** NexusCore (via `error-debugger` mode)
--   **Status:** **Success**
--   **Summary:** Removed the incorrect `packageManager` field from `package.json`. This field erroneously specified `yarn`, while the project is managed by `npm`, resolving potential script and dependency management conflicts.
-
-### Final State
-
-All known bugs have been resolved, and the project configuration is now clean and consistent. The application is ready for use.
-
----
-
-## 2025-07-03 12:57:00
-
-**Task:** Implement "Typewriter" Streaming Output
-
-**Status:** **Success**
-
-### Summary
-
-Successfully refactored the application's output handling to provide a true "typewriter" streaming effect for model responses, significantly improving the user's interactive experience.
-
-### Implementation Details
-
--   **Completed By:** NexusCore (via `code-developer` mode)
--   **File Modified:** `src/index.ts`
--   **Logic:**
-    -   The `runGraph` function was updated to inspect the output from the `Orchestrator` node.
-    -   It now checks if the message content is an async iterable stream (i.e., an `AIMessageChunk`).
-    -   If it is a stream, a nested `for await...of` loop is used to iterate through the content chunks.
-    -   `process.stdout.write()` is used to print each chunk sequentially without a newline, creating the desired typewriter effect.
-    -   Non-streaming messages, such as tool call results, are still printed using the standard `console.log`.
--   **Testing:** The new functionality was validated with comprehensive unit tests located in `tests/index.test.ts`, confirming its reliability.
-
-### Final State
-
-The application now provides a polished, real-time streaming output, making the interaction feel more dynamic and responsive.
-
----
-
-## 2025-07-03 14:11:44
-
-**Task:** Final Debugging & Fix: Enable DeepSeek Reasoning Stream
-
-**Status:** **Success**
-
-### Summary
-
-This entry marks the successful conclusion of an intensive, multi-stage debugging effort to enable the `deepseek-reasoner` model's "thinking" process stream. The final solution was discovered through a collaborative process of elimination, guided by user insight and TypeScript compiler feedback.
-
-### Implementation Details
-
--   **Completed By:** User & NexusCore
--   **File Modified:** `src/agents/orchestrator.ts`
--   **Root Cause Analysis:** The journey to the solution involved methodically disproving several hypotheses:
-    1.  **Incorrect:** Using `additional_kwargs`.
-    2.  **Incorrect:** Checking for `tool_call_chunks`.
-    3.  **Incorrect:** Using `modelKwargs: { include_reasoning: true }`.
-    4.  **Incorrect:** Using a boolean `reasoning: true`.
--   **The Final, Correct Fix:** The breakthrough came from a TypeScript error (`Type 'true' has no properties in common with type 'Reasoning'`), which revealed that the `reasoning` parameter at the top level of the `ChatOpenAI` constructor required an object. By setting it to `reasoning: {}`, we successfully enabled the feature with its default settings, finally resolving the issue.
-
-### Final State
-
-The application is now fully operational and feature-complete as per the initial migration and enhancement goals. It correctly authenticates, connects to the custom API endpoint, dynamically loads tools, and provides a rich, interactive experience, including the model's real-time reasoning process. All known bugs have been resolved. The project has successfully evolved from its Go origins into a robust TypeScript/LangGraph application.
+-   **Milestone:** Re-architected the core graph (`src/graph.ts`) to support interactive, multi-turn conversations with specialist agents.
+-   **Architectural Shift:**
+    -   Moved from a rigid, single-action dispatch model to a flexible "interactive subgraph" pattern.
+    -   Agents now manage their own internal state and use conditional routing to decide whether to continue a conversation or return control to the orchestrator.
+-   **Impact:** This major enhancement allows the system to handle complex, multi-step tasks that require follow-up questions and user clarification, making the agents significantly more capable and autonomous.

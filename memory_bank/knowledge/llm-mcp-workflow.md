@@ -96,14 +96,14 @@ LLM Agent 本身是无状态的，它不知道外界有哪些可用的工具。�
     -   **示例 JSON 输出：**
         ```json
         {
-        	"resource": "github",
-        	"operation": "create_issue",
-        	"params": {
-        		"owner": "mark3labs",
-        		"repo": "travel-u",
-        		"title": "New Feature: Add dark mode",
-        		"body": "User requested to add a dark mode to the application."
-        	}
+            "resource": "github",
+            "operation": "create_issue",
+            "params": {
+                "owner": "mark3labs",
+                "repo": "travel-u",
+                "title": "New Feature: Add dark mode",
+                "body": "User requested to add a dark mode to the application."
+            }
         }
         ```
     -   这个 JSON 对象就是 LLM 给系统下达的明确指令，精确地告诉系统要使用哪个客户端、执行哪个操作，以及附带的所有参数。
