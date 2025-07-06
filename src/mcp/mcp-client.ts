@@ -12,6 +12,7 @@ import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
 import * as fs from "fs";
 import * as path from "path";
 import { MCPConfigs, ToolDefinition } from "./types.js";
+import { resolveCommandPath } from "../utils/command.js";
 
 /**
  * A manager class to hold and interact with multiple MCP clients.
@@ -36,7 +37,7 @@ export class McpClientManager {
                     // Ensure input_schema is a valid object, provide a default if not.
                     const inputSchema =
                         tool.input_schema &&
-                        typeof tool.input_schema === "object"
+                            typeof tool.input_schema === "object"
                             ? tool.input_schema
                             : { type: "object", properties: {} };
 
@@ -124,11 +125,12 @@ export async function initializeMcpClientManager(
             let transport;
 
             if (conf.type === "stdio") {
-                const realCommand =
-                    conf.command === "uvx"
-                        ? "/opt/homebrew/bin/uvx"
-                        : "/Users/BHE24/.nvm/versions/node/v22.11.0/bin/npx";
-
+                const realCommand = resolveCommandPath(conf.command);
+                if (!realCommand) {
+                    throw new Error(
+                        `Failed to resolve path for command: ${conf.command}`
+                    );
+                }
                 // Smartly create the environment for the child process.
                 const env = { ...(conf.env || {}) };
                 if (!env.PATH) {

@@ -50,3 +50,27 @@
     -   Moved from a rigid, single-action dispatch model to a flexible "interactive subgraph" pattern.
     -   Agents now manage their own internal state and use conditional routing to decide whether to continue a conversation or return control to the orchestrator.
 -   **Impact:** This major enhancement allows the system to handle complex, multi-step tasks that require follow-up questions and user clarification, making the agents significantly more capable and autonomous.
+
+### 2025-07-07: Dynamic Command Path Resolution Implementation
+
+-   **Milestone:** Replaced hardcoded executable paths with dynamic resolution
+-   **Details:**
+    -   Created `resolveCommandPath` utility in `src/utils/command.ts` for cross-platform executable discovery
+    -   Integrated path resolution in `McpClientManager` to dynamically locate `uvx`/`npx` binaries
+    -   Added comprehensive test cases in `tests/mcp/mcp-client.test.ts`
+-   **Benefits:**
+    -   Eliminates environment-specific hardcoding
+    -   Enhances cross-platform compatibility
+    -   Simplifies deployment and configuration
+
+### 2025-07-07: Dynamic Command Path Resolution Implementation
+
+-   **Milestone:** Replaced hardcoded executable paths with dynamic resolution
+-   **Details:**
+    -   Created `resolveCommandPath` utility in `src/utils/command.ts` for cross-platform executable discovery
+    -   Integrated path resolution in `McpClientManager` to dynamically locate `uvx`/`npx` binaries
+    -   Added comprehensive test cases in `tests/mcp/mcp-client.test.ts`
+-   **Benefits:**
+    -   Eliminates environment-specific hardcoding
+    -   Enhances cross-platform compatibility
+    -   Simplifies deployment and configuration

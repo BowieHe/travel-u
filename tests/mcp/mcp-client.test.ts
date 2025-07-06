@@ -118,4 +118,39 @@ describe("McpClientManager", () => {
         expect(instance1).toBe(instance2);
         expect(Client).toHaveBeenCalledTimes(1);
     });
+
+    describe("resolveCommandPath integration", () => {
+        let resolveCommandPathSpy: any;
+
+        beforeEach(async () => {
+            // Mock resolveCommandPath implementation
+            const commandUtils = await import("@/utils/command");
+            resolveCommandPathSpy = vi.spyOn(commandUtils, "resolveCommandPath");
+        });
+
+        afterEach(() => {
+            vi.restoreAllMocks();
+        });
+
+        it("should successfully resolve command path", async () => {
+            // Setup mock to return valid path
+            resolveCommandPathSpy.mockReturnValue("/usr/bin/uvx");
+
+            const { initializeMcpClientManager } = await import("@/mcp/mcp-client");
+            await expect(initializeMcpClientManager(testConfig)).resolves.toBeTruthy();
+
+            // Verify mock was called with correct argument
+            expect(resolveCommandPathSpy).toHaveBeenCalledWith("uvx");
+        });
+
+        it("should throw error when command resolution fails", async () => {
+            // Setup mock to return null (not found)
+            resolveCommandPathSpy.mockReturnValue(null);
+
+            const { initializeMcpClientManager } = await import("@/mcp/mcp-client");
+            await expect(initializeMcpClientManager(testConfig)).rejects.toThrow(
+                "Failed to resolve path for command: uvx"
+            );
+        });
+    });
 });
