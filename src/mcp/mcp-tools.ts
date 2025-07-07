@@ -5,9 +5,10 @@
  * and wrapping them in a format that LangGraph can use (DynamicTool).
  */
 
-import { DynamicStructuredTool } from "@langchain/core/tools";
+import { DynamicStructuredTool, Tool } from "@langchain/core/tools";
 import { getMcpClientManager } from "./mcp-client";
 import { z } from "zod";
+import { ToolDefinition } from "./types";
 
 /**
  * Converts a JSON Schema object to a Zod schema.
@@ -59,12 +60,17 @@ function jsonSchemaToZod(schema: any): z.ZodType<any, any> {
  * Fetches tool definitions from the MCP client and creates DynamicStructuredTool instances.
  * @returns A promise that resolves to an array of DynamicStructuredTool instances.
  */
-export async function createMcpTools(): Promise<DynamicStructuredTool[]> {
+export async function createMcpTools(): Promise<{
+    tools: Tool[];
+    toolDefs: Record<string, ToolDefinition>;
+}> {
     const mcpClient = getMcpClientManager();
-    const toolDefs = await mcpClient.listTools();
-    const dynamicTools: DynamicStructuredTool[] = [];
+    const toolDefsArray = await mcpClient.listTools();
+    const dynamicTools: Tool[] = [];
+    const toolDefs: Record<string, ToolDefinition> = {};
 
-    for (const toolDef of toolDefs) {
+    for (const toolDef of toolDefsArray) {
+        toolDefs[toolDef.name] = toolDef;
         const schema = jsonSchemaToZod(toolDef.input_schema);
 
         const tool = new DynamicStructuredTool({
@@ -88,12 +94,12 @@ export async function createMcpTools(): Promise<DynamicStructuredTool[]> {
             },
         });
 
-        dynamicTools.push(tool);
+        dynamicTools.push(tool as unknown as Tool);
     }
 
     console.log(
         "Dynamically created MCP tools:",
         dynamicTools.map((t) => t.name).join(", ")
     );
-    return dynamicTools;
+    return { tools: dynamicTools, toolDefs };
 }

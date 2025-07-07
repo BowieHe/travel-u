@@ -1,117 +1,67 @@
-import { ToolMessage } from "@langchain/core/messages";
+import { AIMessage, AIMessageChunk } from "@langchain/core/messages";
 import { AgentState } from "../state";
-import { RunnableAgent } from "./base";
-import { ToolNode } from "@langchain/langgraph/prebuilt";
-import { z } from "zod";
-import { Runnable } from "@langchain/core/runnables";
-import { BaseLanguageModelInput } from "@langchain/core/language_models/base";
-import { AIMessageChunk } from "@langchain/core/messages";
-import { BaseChatModelCallOptions } from "@langchain/core/language_models/chat_models";
+import { Tool } from "@langchain/core/tools";
+import { Runnable, RunnableLambda } from "@langchain/core/runnables";
 import { DeepSeek } from "@/models/deepseek";
 
-const ToolCallSchema = z.object({
-    name: z.string(),
-    args: z.record(z.unknown()),
-    id: z.string().optional(),
-});
+/**
+ * The orchestrator is responsible for deciding which tool to call.
+ */
+export const createOrchestrator = (
+    tools: Tool[]
+): Runnable<AgentState, Partial<AgentState>> => {
+    const ds = new DeepSeek();
+    const model = ds.llm("deepseek-chat").bindTools(tools);
 
-const AgentStateSchema = z.object({
-    messages: z.array(z.any()), // Can be refined based on actual message types
-    next: z
-        .union([
-            z.literal("Orchestrator"),
-            z.literal("Transportation"),
-            z.literal("Destination"),
-            z.literal("END"),
-        ])
-        .optional(),
-});
+    return new RunnableLambda({
+        func: async (state: AgentState): Promise<Partial<AgentState>> => {
+            console.log("---ORCHESTRATOR---");
 
-export class Orchestrator extends RunnableAgent {
-    private llm: Runnable<
-        BaseLanguageModelInput,
-        AIMessageChunk,
-        BaseChatModelCallOptions
-    >;
-    private toolNode: ToolNode;
+            const stream = await model.stream(state.messages);
 
-    constructor(toolNode: ToolNode) {
-        super();
-        this.toolNode = toolNode;
-        const ds = new DeepSeek();
-        const deepseek = ds.llm("deepseek-chat");
+            let finalMessage: AIMessageChunk | null = null;
+            process.stdout.write("\n--- Output from node: Orchestrator ---\n");
+            for await (const chunk of stream) {
+                if (
+                    chunk.additional_kwargs &&
+                    chunk.additional_kwargs.reasoning_content
+                ) {
+                    process.stdout.write(
+                        chunk.additional_kwargs.reasoning_content as string
+                    );
+                }
 
-        this.llm = deepseek.bindTools(this.toolNode.tools);
-    }
+                if (chunk.content) {
+                    process.stdout.write(chunk.content as string);
+                }
+                if (finalMessage === null) {
+                    finalMessage = chunk;
+                } else {
+                    finalMessage = finalMessage.concat(chunk);
+                }
+            }
+            process.stdout.write("\n");
 
-    public async invoke(state: AgentState): Promise<Partial<AgentState>> {
-        const validatedState = AgentStateSchema.parse(state);
-        console.log("---ORCHESTRATOR---");
-        const stream = await this.llm.stream(validatedState.messages);
+            const message = new AIMessage({
+                content: finalMessage?.content ?? "",
+                tool_calls: finalMessage?.tool_calls ?? [],
+            });
 
-        let finalMessage: AIMessageChunk | null = null;
-        process.stdout.write("\n--- Output from node: Orchestrator ---\n");
-        for await (const chunk of stream) {
-            // The reasoning content is streamed in the `additional_kwargs`.
-            // We must check for it and print it to see the model's thought process.
-            if (
-                chunk.additional_kwargs &&
-                chunk.additional_kwargs.reasoning_content
-            ) {
-                process.stdout.write(
-                    chunk.additional_kwargs.reasoning_content as string
-                );
+            const toolCalls = message.tool_calls ?? [];
+            if (toolCalls.length > 0) {
+                const toolName = toolCalls[0].name;
+                console.log(`Orchestrator decided to call tool: ${toolName}`);
+                return {
+                    next_tool: toolName,
+                };
             }
 
-            // Also stream the main content, which is the final answer.
-            if (chunk.content) {
-                process.stdout.write(chunk.content as string);
-            }
-            // 2. Aggregate the final message
-            if (finalMessage === null) {
-                finalMessage = chunk;
-            } else {
-                finalMessage = finalMessage.concat(chunk);
-            }
-        }
-        process.stdout.write("\n");
-
-        // If the model decides to call a tool, it will be in the tool_calls property.
-        if (
-            finalMessage &&
-            finalMessage.tool_calls &&
-            finalMessage.tool_calls.length > 0
-        ) {
-            const validatedCalls = z
-                .array(ToolCallSchema)
-                .parse(finalMessage.tool_calls);
-            const toolInvocations = validatedCalls.map((call) => ({
-                tool: call.name,
-                toolInput: call.args,
-            }));
-
-            const toolMessages = await this.toolNode.batch(toolInvocations);
-
-            const result: Partial<AgentState> = {
-                messages: [
-                    ...toolMessages.map((message, i) => {
-                        return new ToolMessage({
-                            content: message,
-                            tool_call_id: validatedCalls[i].id!,
-                        });
-                    }),
-                ],
-                next: "Orchestrator", // Loop back to orchestrator to process tool result
+            return {
+                messages: [message],
+                next_tool: null,
             };
-            return AgentStateSchema.partial().parse(result);
-        }
-
-        // For now, we'll just end if no tool is called.
-        // A more robust implementation would handle this case better.
-        const result: Partial<AgentState> = {
-            messages: [finalMessage!],
-            next: "END",
-        };
-        return AgentStateSchema.partial().parse(result);
-    }
-}
+        },
+    }).withConfig({
+        runName: "Orchestrator",
+    });
+};

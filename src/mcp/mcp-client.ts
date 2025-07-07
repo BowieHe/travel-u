@@ -9,10 +9,10 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
-import * as fs from "fs";
+import * as fs from "fs/promises";
 import * as path from "path";
-import { MCPConfigs, ToolDefinition } from "./types.js";
-import { resolveCommandPath } from "../utils/command.js";
+import { MCPConfigs, ToolDefinition } from "@/mcp/types";
+import { interpolateEnvVars, resolveCommandPath } from "@/utils/command";
 
 /**
  * A manager class to hold and interact with multiple MCP clients.
@@ -37,7 +37,7 @@ export class McpClientManager {
                     // Ensure input_schema is a valid object, provide a default if not.
                     const inputSchema =
                         tool.input_schema &&
-                            typeof tool.input_schema === "object"
+                        typeof tool.input_schema === "object"
                             ? tool.input_schema
                             : { type: "object", properties: {} };
 
@@ -103,59 +103,105 @@ export async function initFromConfig(
     ...location: string[]
 ): Promise<McpClientManager> {
     const configPath = path.join(...location);
-    const configFile = fs.readFileSync(configPath, "utf-8");
+    const configFile = await fs.readFile(configPath, "utf-8");
     const config: MCPConfigs = JSON.parse(configFile);
 
     return initializeMcpClientManager(config);
 }
+
+const DEFAULT_TIMEOUT_MS = 5000;
+const DEFAULT_RETRIES = 3;
+
 export async function initializeMcpClientManager(
-    config: MCPConfigs
+    config: MCPConfigs,
+    options: {
+        timeoutMs?: number;
+        maxRetries?: number;
+    } = {}
 ): Promise<McpClientManager> {
+    const { timeoutMs = DEFAULT_TIMEOUT_MS, maxRetries = DEFAULT_RETRIES } =
+        options;
     if (clientManagerInstance) {
         return clientManagerInstance;
     }
 
     const manager = new McpClientManager();
     for (const [name, conf] of Object.entries(config.mcpServers)) {
-        try {
-            const client = new Client({
-                name: `${name}-client`,
-                version: "1.0.0",
-            });
-            let transport;
+        let lastError: Error | null = null;
+        let retryCount = 0;
 
-            if (conf.type === "stdio") {
-                const realCommand = resolveCommandPath(conf.command);
-                if (!realCommand) {
+        while (retryCount <= maxRetries) {
+            try {
+                const client = new Client({
+                    name: `${name}-client`,
+                    version: "1.0.0",
+                });
+                let transport;
+
+                if (conf.type === "stdio") {
+                    const realCommand = resolveCommandPath(conf.command);
+                    if (!realCommand) {
+                        throw new Error(
+                            `Failed to resolve path for command: ${conf.command}`
+                        );
+                    }
+                    // Smartly create the environment for the child process.
+                    const env = { ...(conf.env || {}) };
+                    if (!env.PATH) {
+                        const systemPaths = "/usr/bin:/bin";
+                        const currentPath = process.env.PATH || "";
+                        env.PATH = `${currentPath}:${systemPaths}`;
+                    }
+
+                    transport = new StdioClientTransport({
+                        command: realCommand,
+                        args: conf.args,
+                        env: env,
+                    });
+                } else {
+                    const convertedUrl = interpolateEnvVars(conf.url);
+                    transport = new SSEClientTransport(new URL(convertedUrl));
+                }
+
+                // Add timeout to client connection
+                await Promise.race([
+                    client.connect(transport),
+                    new Promise((_, reject) =>
+                        setTimeout(
+                            () =>
+                                reject(
+                                    new Error(
+                                        `Connection timeout after ${timeoutMs}ms`
+                                    )
+                                ),
+                            timeoutMs
+                        )
+                    ),
+                ]);
+
+                manager.registerClient(name, client);
+                break; // Success - exit retry loop
+            } catch (error) {
+                lastError = error as Error;
+                retryCount++;
+                if (retryCount <= maxRetries) {
+                    console.warn(
+                        `Retrying client ${name} (attempt ${retryCount}/${maxRetries})...`,
+                        error
+                    );
+                    await new Promise((res) =>
+                        setTimeout(res, 1000 * retryCount)
+                    ); // Exponential backoff
+                } else {
+                    console.error(
+                        `Failed to initialize client ${name} after ${maxRetries} attempts:`,
+                        error
+                    );
                     throw new Error(
-                        `Failed to resolve path for command: ${conf.command}`
+                        `Failed to initialize client ${name}: ${lastError.message}`
                     );
                 }
-                // Smartly create the environment for the child process.
-                const env = { ...(conf.env || {}) };
-                if (!env.PATH) {
-                    const systemPaths = "/usr/bin:/bin";
-                    const currentPath = process.env.PATH || "";
-                    env.PATH = `${currentPath}:${systemPaths}`;
-                }
-
-                transport = new StdioClientTransport({
-                    command: realCommand,
-                    args: conf.args,
-                    env: env,
-                });
-            } else {
-                transport = new SSEClientTransport(new URL(conf.url));
             }
-
-            await client.connect(transport);
-            manager.registerClient(name, client);
-        } catch (error) {
-            console.error(
-                `Failed to initialize McpClientManager: ${name}:`,
-                error
-            );
-            throw error;
         }
     }
 

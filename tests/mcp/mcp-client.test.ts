@@ -89,6 +89,35 @@ describe("McpClientManager", () => {
         expect(clients.has("time")).toBe(true);
     });
 
+    it("should throw timeout error when connection takes too long", async () => {
+        const { initializeMcpClientManager } = await import("@/mcp/mcp-client");
+        const mockSdkClient = (Client as any).mock.results[0].value;
+        mockSdkClient.connect.mockImplementation(
+            () => new Promise((resolve) => setTimeout(resolve, 100))
+        );
+
+        await expect(
+            initializeMcpClientManager(testConfig, { timeoutMs: 50 })
+        ).rejects.toThrow("Connection timeout after 50ms");
+    });
+
+    it("should retry failed connections", async () => {
+        const { initializeMcpClientManager } = await import("@/mcp/mcp-client");
+        const mockSdkClient = (Client as any).mock.results[0].value;
+
+        // Fail first 2 attempts, succeed on 3rd
+        mockSdkClient.connect
+            .mockRejectedValueOnce(new Error("Connection failed"))
+            .mockRejectedValueOnce(new Error("Connection failed"))
+            .mockResolvedValue(undefined);
+
+        const manager = await initializeMcpClientManager(testConfig, {
+            maxRetries: 3,
+        });
+        expect(mockSdkClient.connect).toHaveBeenCalledTimes(3);
+        expect((manager as any).clients.size).toBe(1);
+    });
+
     it("should list aggregated tools with correct prefixes", async () => {
         const { initializeMcpClientManager } = await import("@/mcp/mcp-client");
         const manager = await initializeMcpClientManager(testConfig);
@@ -125,7 +154,10 @@ describe("McpClientManager", () => {
         beforeEach(async () => {
             // Mock resolveCommandPath implementation
             const commandUtils = await import("@/utils/command");
-            resolveCommandPathSpy = vi.spyOn(commandUtils, "resolveCommandPath");
+            resolveCommandPathSpy = vi.spyOn(
+                commandUtils,
+                "resolveCommandPath"
+            );
         });
 
         afterEach(() => {
@@ -136,8 +168,12 @@ describe("McpClientManager", () => {
             // Setup mock to return valid path
             resolveCommandPathSpy.mockReturnValue("/usr/bin/uvx");
 
-            const { initializeMcpClientManager } = await import("@/mcp/mcp-client");
-            await expect(initializeMcpClientManager(testConfig)).resolves.toBeTruthy();
+            const { initializeMcpClientManager } = await import(
+                "@/mcp/mcp-client"
+            );
+            await expect(
+                initializeMcpClientManager(testConfig)
+            ).resolves.toBeTruthy();
 
             // Verify mock was called with correct argument
             expect(resolveCommandPathSpy).toHaveBeenCalledWith("uvx");
@@ -147,10 +183,12 @@ describe("McpClientManager", () => {
             // Setup mock to return null (not found)
             resolveCommandPathSpy.mockReturnValue(null);
 
-            const { initializeMcpClientManager } = await import("@/mcp/mcp-client");
-            await expect(initializeMcpClientManager(testConfig)).rejects.toThrow(
-                "Failed to resolve path for command: uvx"
+            const { initializeMcpClientManager } = await import(
+                "@/mcp/mcp-client"
             );
+            await expect(
+                initializeMcpClientManager(testConfig)
+            ).rejects.toThrow("Failed to resolve path for command: uvx");
         });
     });
 });

@@ -1,19 +1,20 @@
 import { ChatOpenAI } from "@langchain/openai";
-import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { BaseLLM } from "./base"; // 根据你的路径修改
 
 export class OpenAI extends BaseLLM {
-    public getLLM(
-        model: string,
-        apiKey: string,
-        url: string,
-        overrideConfig?: Record<string, any>
-    ): BaseChatModel {
-        const fullConfig = this.mergeConfig(url, overrideConfig);
+    constructor(url?: string, apiKey?: string) {
+        const openUrl = url ? url : process.env.OPENAI_URL;
+        const openAPI = apiKey ? apiKey : process.env.OPENAI_API_KEY;
+        super(openUrl, openAPI);
+    }
+
+    public llm(model: string): ChatOpenAI {
         return new ChatOpenAI({
-            ...fullConfig,
-            modelName: model,
-            openAIApiKey: apiKey,
+            model: model,
+            openAIApiKey: this.apiKey,
+            configuration: {
+                baseURL: this.url,
+            },
         });
     }
 }

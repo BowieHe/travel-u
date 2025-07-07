@@ -42,7 +42,7 @@ describe("createMcpTools", () => {
         mockListTools.mockResolvedValue(mockToolDefinitions);
 
         // Act: Call the function we are testing
-        const dynamicTools = await createMcpTools();
+        const { tools: dynamicTools, toolDefs } = await createMcpTools();
 
         // Assert: Check that the tools were created correctly
         expect(getMcpClientManager).toHaveBeenCalledTimes(1);
@@ -51,6 +51,9 @@ describe("createMcpTools", () => {
         expect(dynamicTools[0].name).toBe("time_get_current_time");
         expect(dynamicTools[0].description).toBe(
             "A test tool for getting time"
+        );
+        expect(toolDefs["time_get_current_time"]).toEqual(
+            mockToolDefinitions[0]
         );
     });
 
@@ -63,53 +66,31 @@ describe("createMcpTools", () => {
         mockCallTool.mockResolvedValue({ success: true, result: "done" });
 
         // Act
-        const dynamicTools = await createMcpTools();
-        const result = await dynamicTools[0].invoke(
-            JSON.stringify({ arg1: "value1" })
-        );
+        const { tools: dynamicTools } = await createMcpTools();
+        const result = await dynamicTools[0].invoke({ arg1: "value1" });
 
         // Assert
         expect(mockCallTool).toHaveBeenCalledTimes(1);
         expect(mockCallTool).toHaveBeenCalledWith("test_tool", {
             arg1: "value1",
         });
-        expect(result).toEqual({ success: true, result: "done" });
+        expect(result).toBe(JSON.stringify({ success: true, result: "done" }));
     });
 
-    it("should create a tool that handles non-JSON string input", async () => {
+    it("should return an error message if callTool fails", async () => {
         // Arrange
         const mockToolDefinitions: ToolDefinition[] = [
             { name: "test_tool", description: "d", input_schema: {} },
         ];
         mockListTools.mockResolvedValue(mockToolDefinitions);
+        mockCallTool.mockRejectedValue(new Error("Something went wrong"));
 
         // Act
-        const dynamicTools = await createMcpTools();
-        await dynamicTools[0].invoke("just a raw string");
+        const { tools: dynamicTools } = await createMcpTools();
+        const result = await dynamicTools[0].invoke({ arg1: "value1" });
 
         // Assert
-        expect(mockCallTool).toHaveBeenCalledTimes(1);
-        // It should wrap the raw string in an 'input' property
-        expect(mockCallTool).toHaveBeenCalledWith("test_tool", {
-            input: "just a raw string",
-        });
-    });
-
-    it("should create a tool that handles empty or empty JSON string input", async () => {
-        // Arrange
-        const mockToolDefinitions: ToolDefinition[] = [
-            { name: "test_tool", description: "d", input_schema: {} },
-        ];
-        mockListTools.mockResolvedValue(mockToolDefinitions);
-
-        // Act & Assert for empty string
-        const dynamicTools = await createMcpTools();
-        await dynamicTools[0].invoke("");
-        expect(mockCallTool).toHaveBeenCalledWith("test_tool", {});
-
-        // Act & Assert for empty JSON object string
-        await dynamicTools[0].invoke("{}");
-        expect(mockCallTool).toHaveBeenCalledWith("test_tool", {});
+        expect(result).toBe("Error: Something went wrong");
     });
 
     it("should return an empty array if the manager provides no tools", async () => {
@@ -117,7 +98,7 @@ describe("createMcpTools", () => {
         mockListTools.mockResolvedValue([]);
 
         // Act
-        const dynamicTools = await createMcpTools();
+        const { tools: dynamicTools } = await createMcpTools();
 
         // Assert
         expect(dynamicTools).toHaveLength(0);

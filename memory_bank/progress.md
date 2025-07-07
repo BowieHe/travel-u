@@ -74,3 +74,34 @@
     -   Eliminates environment-specific hardcoding
     -   Enhances cross-platform compatibility
     -   Simplifies deployment and configuration
+
+### 2025-07-07: Advanced Debugging & Architectural Refinement
+
+-   **Milestone:** Successfully resolved a persistent `TypeError` in the `ToolNode` and identified a key architectural improvement opportunity.
+-   **Details:**
+    -   After an initial fix proved insufficient, a second, more in-depth `error-debugger` sub-task was dispatched.
+    -   The investigation revealed the root cause was not just a missing `tool_calls` array, but a more fundamental issue in how the final `AIMessage` was being constructed and passed within the LangGraph state.
+    -   The `TypeError` was definitively fixed by refactoring `src/graph.ts` and `src/agents/orchestrator.ts` to ensure a correctly instantiated `AIMessage` is always passed to the `ToolNode`.
+    -   Crucially, the debugging process also uncovered that the `Orchestrator` was overburdened with both high-level routing and low-level parameter parsing, leading to tool argument errors.
+-   **Impact & Next Steps:**
+    -   The system is now stable and free from the critical `TypeError` crash.
+    -   A major architectural decision was made to introduce a dedicated **Parameter Parsing Agent** in the future. This will decouple responsibilities, making the system more robust and scalable. The `Orchestrator`'s prompt has been simplified in preparation for this change.
+
+### 2025-07-07: Implementation of the Parameter Parser Agent
+
+-   **Milestone:** Created the first version of the `ParserAgent` (`src/agents/parser.ts`), a specialized agent dedicated to converting natural language into precise JSON tool parameters.
+-   **Details:**
+    -   A `code-developer` sub-task was dispatched to implement the agent.
+    -   The agent is built using a flexible factory function (`createParserAgent`) and leverages LangChain Expression Language (LCEL) for a clean, chainable workflow.
+    -   It utilizes the `gpt-4.1-mini` model, as requested, for high-accuracy parameter extraction based on a custom-designed system prompt.
+-   **Impact:** This new agent is the first concrete step in realizing our new, more robust architecture. It successfully decouples parameter parsing from the `Orchestrator`, laying the groundwork for the next phase of graph integration.
+
+### 2025-07-07: Full Integration of the New Agent Architecture
+
+-   **Milestone:** Successfully integrated the `ParserAgent` into the main LangGraph workflow, completing our new two-step agent architecture.
+-   **Details:**
+    -   A `code-developer` sub-task was dispatched to perform the integration.
+    -   The `AgentState` was updated with a `next_tool` field to pass tool-calling intent.
+    -   The `Orchestrator` was refactored to only be responsible for setting `next_tool`.
+    -   The core graph in `src/graph.ts` was re-architected to include a new `parser` node and establish the `Orchestrator -> Parser -> ToolNode` execution path.
+-   **Impact:** The project's architecture is now fundamentally more robust, modular, and scalable. The clear separation of concerns between task orchestration and parameter parsing resolves previous bugs and provides a solid foundation for future feature development.

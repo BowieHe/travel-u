@@ -24,12 +24,8 @@
             }
         },
         "amap-maps": {
-            "type": "stdio",
-            "command": "npx",
-            "args": ["-y", "@amap/amap-maps-mcp-server"],
-            "env": {
-                "AMAP_MAPS_API_KEY": "${AMAP_WEB_API}"
-            }
+            "type": "sse",
+            "url": "https://mcp.amap.com/sse?key=${AMAP_WEB_API}"
         }
     }
 }

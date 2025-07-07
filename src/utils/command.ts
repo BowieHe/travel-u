@@ -23,3 +23,15 @@ export function resolveCommandPath(command: string): string | null {
         return null;
     }
 }
+
+export function interpolateEnvVars(rawString: string): string {
+    // 匹配 ${ANY_ENV_VAR} 的正则表达式
+    const envVarRegex = /\$\{([^}]+)\}/g;
+    return rawString.replace(envVarRegex, (match, envVarName) => {
+        const value = process.env[envVarName];
+        if (value === undefined) {
+            throw new Error(`环境变量未定义: ${envVarName}`);
+        }
+        return value;
+    });
+}
