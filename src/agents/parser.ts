@@ -13,7 +13,7 @@ Generate ONLY the JSON object containing the extracted parameters. Do not includ
 export const createParserAgent = (
     toolName: string,
     toolDescription: string,
-    toolSchema: object
+    toolSchema: string
 ): Runnable<AgentState, Partial<AgentState>> => {
     const model = new OpenAI().llm("gpt-4.1-mini");
 
@@ -52,7 +52,7 @@ export const createParserAgent = (
             const response = await chain.invoke({
                 userInput: userInput,
                 toolDescription: toolDescription,
-                toolSchema: JSON.stringify(toolSchema, null, 2),
+                toolSchema: toolSchema,
             });
 
             console.log("get response from parser: ", response);

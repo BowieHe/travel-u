@@ -40,7 +40,7 @@ export class McpClientManager {
                     allTools.push({
                         name: `${clientName}_${tool.name}`,
                         description: tool.description || "",
-                        input_schema: tool.input_schema ?? {}, // Use nullish coalescing for safety
+                        input_schema: JSON.stringify(tool.input_schema) //?? {}, // Use nullish coalescing for safety
                     });
                 }
             }
@@ -148,6 +148,15 @@ export async function initializeMcpClientManager(
                     }
                     // Smartly create the environment for the child process.
                     const env = { ...(conf.env || {}) };
+
+                    // Inject proxy settings if they are present in the parent process
+                    if (process.env.HTTP_PROXY) {
+                        env.HTTP_PROXY = process.env.HTTP_PROXY;
+                    }
+                    if (process.env.HTTPS_PROXY) {
+                        env.HTTPS_PROXY = process.env.HTTPS_PROXY;
+                    }
+
                     if (!env.PATH) {
                         const systemPaths = "/usr/bin:/bin";
                         const currentPath = process.env.PATH || "";

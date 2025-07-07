@@ -30,13 +30,13 @@ describe("createMcpTools", () => {
             {
                 name: "time_get_current_time",
                 description: "A test tool for getting time",
-                input_schema: {
+                input_schema: JSON.stringify({
                     type: "object",
                     properties: {
                         timezone: { type: "string", description: "e.g. 'UTC'" },
                     },
                     required: ["timezone"],
-                },
+                }),
             },
         ];
         mockListTools.mockResolvedValue(mockToolDefinitions);
@@ -60,7 +60,7 @@ describe("createMcpTools", () => {
     it("should create a tool that correctly calls the manager's callTool method with JSON string input", async () => {
         // Arrange
         const mockToolDefinitions: ToolDefinition[] = [
-            { name: "test_tool", description: "d", input_schema: {} },
+            { name: "test_tool", description: "d", input_schema: "{}" },
         ];
         mockListTools.mockResolvedValue(mockToolDefinitions);
         mockCallTool.mockResolvedValue({ success: true, result: "done" });
@@ -80,7 +80,7 @@ describe("createMcpTools", () => {
     it("should return an error message if callTool fails", async () => {
         // Arrange
         const mockToolDefinitions: ToolDefinition[] = [
-            { name: "test_tool", description: "d", input_schema: {} },
+            { name: "test_tool", description: "d", input_schema: "{}" },
         ];
         mockListTools.mockResolvedValue(mockToolDefinitions);
         mockCallTool.mockRejectedValue(new Error("Something went wrong"));
