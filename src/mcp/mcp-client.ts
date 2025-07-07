@@ -31,21 +31,16 @@ export class McpClientManager {
         for (const [clientName, client] of this.clients.entries()) {
             const clientToolsResult = await client.listTools();
 
-            console.log(`Get client tools`, clientToolsResult);
+            console.log(
+                `Get client tools`,
+                JSON.stringify(clientToolsResult, null, 2)
+            );
             if (clientToolsResult && Array.isArray(clientToolsResult.tools)) {
                 for (const tool of clientToolsResult.tools) {
-                    // Ensure input_schema is a valid object, provide a default if not.
-                    const inputSchema =
-                        tool.input_schema &&
-                        typeof tool.input_schema === "object"
-                            ? tool.input_schema
-                            : { type: "object", properties: {} };
-
                     allTools.push({
                         name: `${clientName}_${tool.name}`,
-                        // Provide a default empty string for description if it's undefined.
                         description: tool.description || "",
-                        input_schema: inputSchema,
+                        input_schema: tool.input_schema ?? {}, // Use nullish coalescing for safety
                     });
                 }
             }
@@ -61,6 +56,12 @@ export class McpClientManager {
      * @returns A promise that resolves to the result of the tool call.
      */
     async callTool(prefixedToolName: string, args: any): Promise<any> {
+        console.log(
+            `calling tools with name:`,
+            prefixedToolName,
+            " and args",
+            args
+        );
         const [clientName, ...toolNameParts] = prefixedToolName.split("_");
         const originalToolName = toolNameParts.join("_");
 

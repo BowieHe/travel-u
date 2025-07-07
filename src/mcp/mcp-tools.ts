@@ -11,52 +11,6 @@ import { z } from "zod";
 import { ToolDefinition } from "./types";
 
 /**
- * Converts a JSON Schema object to a Zod schema.
- * This is a simplified implementation.
- * @param schema The JSON schema for the tool's input.
- * @returns A Zod schema.
- */
-function jsonSchemaToZod(schema: any): z.ZodType<any, any> {
-    if (
-        typeof schema !== "object" ||
-        schema === null ||
-        schema.type !== "object" ||
-        !schema.properties
-    ) {
-        return z.object({});
-    }
-
-    const shape: { [key: string]: z.ZodType<any, any> } = {};
-    const requiredFields = new Set(schema.required || []);
-
-    for (const key in schema.properties) {
-        const prop = schema.properties[key];
-        let fieldSchema: z.ZodType<any, any>;
-
-        switch (prop.type) {
-            case "string":
-                fieldSchema = z.string().describe(prop.description || "");
-                break;
-            case "number":
-                fieldSchema = z.number().describe(prop.description || "");
-                break;
-            case "boolean":
-                fieldSchema = z.boolean().describe(prop.description || "");
-                break;
-            default:
-                fieldSchema = z.any();
-        }
-
-        if (!requiredFields.has(key)) {
-            fieldSchema = fieldSchema.optional();
-        }
-        shape[key] = fieldSchema;
-    }
-
-    return z.object(shape);
-}
-
-/**
  * Fetches tool definitions from the MCP client and creates DynamicStructuredTool instances.
  * @returns A promise that resolves to an array of DynamicStructuredTool instances.
  */
@@ -71,16 +25,17 @@ export async function createMcpTools(): Promise<{
 
     for (const toolDef of toolDefsArray) {
         toolDefs[toolDef.name] = toolDef;
-        const schema = jsonSchemaToZod(toolDef.input_schema);
-
         const tool = new DynamicStructuredTool({
             name: toolDef.name, // Already prefixed, e.g., "github_create_issue"
             description: toolDef.description,
-            schema: schema,
+            // We provide a generic Zod schema that accepts any object.
+            // The actual validation is done by the LLM in the ParserAgent based on the raw JSON schema.
+            schema: z.object({}).passthrough(),
             func: async (args: any) => {
                 try {
                     const result = await mcpClient.callTool(toolDef.name, args);
                     // LangChain expects a string return from a tool function.
+                    console.log("get tool call result:", result);
                     return typeof result === "string"
                         ? result
                         : JSON.stringify(result);

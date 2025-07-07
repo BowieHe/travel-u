@@ -72,7 +72,7 @@ export const initializeGraph = async () => {
     };
 
     // 6. Add edges
-    workflow.setEntryPoint("orchestrator");
+    workflow.addEdge(START, "orchestrator");
     workflow.addConditionalEdges("orchestrator", router);
     workflow.addEdge("parser", "tool_node");
     workflow.addEdge("tool_node", "orchestrator");

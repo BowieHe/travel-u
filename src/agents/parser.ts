@@ -41,11 +41,21 @@ export const createParserAgent = (
 
             const chain = prompt.pipe(model);
 
+            console.log(
+                "get data in parser: userInput",
+                userInput,
+                " and tool description:",
+                toolDescription,
+                " and toolSchema:",
+                toolSchema
+            );
             const response = await chain.invoke({
                 userInput: userInput,
                 toolDescription: toolDescription,
                 toolSchema: JSON.stringify(toolSchema, null, 2),
             });
+
+            console.log("get response from parser: ", response);
 
             const args = JSON.parse(response.content as string);
             const toolCall = {
