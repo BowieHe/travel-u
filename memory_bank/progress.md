@@ -105,3 +105,64 @@
     -   The `Orchestrator` was refactored to only be responsible for setting `next_tool`.
     -   The core graph in `src/graph.ts` was re-architected to include a new `parser` node and establish the `Orchestrator -> Parser -> ToolNode` execution path.
 -   **Impact:** The project's architecture is now fundamentally more robust, modular, and scalable. The clear separation of concerns between task orchestration and parameter parsing resolves previous bugs and provides a solid foundation for future feature development.
+
+### 2025-07-08: Knowledge Capture of ReAct-based Orchestrator Pattern
+
+-   **Milestone:** Captured and documented a valuable pseudo-code implementation for a ReAct-based Orchestrator.
+-   **Details:**
+    -   A user-provided pseudo-code snippet demonstrating how to build an orchestrator using LangGraph's `createReActAgent` was saved to the knowledge base.
+    -   This pattern, now stored in `memory_bank/knowledge/orchestrator-react-agent-pattern.md`, provides a concrete example of handling tool calls, user queries, and sub-task generation within a single, reactive loop.
+-   **Impact:** This captured knowledge enriches our design patterns, offering a powerful alternative to our current multi-agent (Orchestrator -> Parser) architecture for specific use cases. It will serve as a key reference for future architectural discussions and potential refactoring efforts.
+
+### 2025-07-08: Architectural Refactor to a ReAct-based Conditional Graph
+
+-   **Milestone:** Successfully refactored the core application to use a ReAct-based conditional routing graph, significantly enhancing architectural clarity and flexibility.
+-   **Details:**
+    -   A `code-developer` sub-task was dispatched to implement the new architecture based on a user-provided pattern.
+    -   **Orchestrator (`src/agents/orchestrator.ts`):** The orchestrator was transformed into a `NodeHandler` that inspects the output of the ReAct agent and returns explicit routing directions (`next: "tools"` or `next: "END"`).
+    -   **Graph (`src/graph.ts`):** The graph was re-architected to be driven by the orchestrator's decisions. It now includes a `ToolNode` and uses `addConditionalEdges` to create a dynamic loop: `Orchestrator -> (decide) -> ToolNode -> Orchestrator`.
+    -   **State (`src/state.ts`):** The `AgentState` was simplified by removing the `next_tool` field, as routing is now handled explicitly by the graph.
+-   **Impact:** This fundamental architectural shift moves away from a "black-box" agent to a transparent, graph-driven control flow. The system is now more robust, easier to debug, and provides a superior foundation for implementing complex, multi-step agentic workflows.
+
+### 2025-07-08: Fix for User Interaction Loop
+
+-   **Milestone:** Successfully implemented a true interactive loop by fixing a critical flaw in the Orchestrator's logic.
+-   **Details:**
+    -   Following user feedback, a `code-developer` sub-task was dispatched to address an issue where the agent would not pause to ask for user clarification.
+    -   **Orchestrator (`src/agents/orchestrator.ts`):** The agent's `systemPrompt` was updated to explicitly instruct the model to ask the user when information is insufficient. The node's logic was corrected to check for regular message outputs (indicating a question) and return a new `{ next: "ask_user" }` state.
+    -   **Graph (`src/graph.ts`):** The conditional routing was updated to include an `ask_user: END` branch. This leverages LangGraph's checkpointing feature to pause the graph execution, waiting for the next user input.
+-   **Impact:** The system can now correctly identify when to ask for more information, pause its execution, and wait for a user's response. This resolves a major functional gap and makes the agent truly interactive and intelligent.
+
+## Phase 4: True Hierarchical Architecture (Late July 2025)
+
+### 2025-07-08: Definitive Refactor to a True Task-Decomposition Architecture
+
+-   **Milestone:** After multiple iterations and invaluable user feedback, the system has been decisively refactored to a true, hierarchical task-decomposition architecture, fully realizing the initial design vision.
+-   **Architectural Transformation:**
+    -   A final, comprehensive `code-developer` sub-task was dispatched to correct all prior architectural flaws.
+    -   **Orchestrator:** Its role has been strictly redefined to that of an **information gatherer**. It no longer executes tasks but solely interacts with the user to collect parameters, outputting a structured `subtask` JSON object upon completion.
+    -   **Graph & Router:** The graph was fundamentally rebuilt. Specialist agents are now independent nodes. A new `router` conditional edge was introduced to intelligently dispatch the `subtask` from the Orchestrator to the appropriate Specialist based on its content.
+    -   **Separation of Concerns:** The system now has a crystal-clear separation between task decomposition (Orchestrator) and task execution (Specialists), eliminating the previous architectural ambiguity.
+-   **Impact:** This definitive refactoring resolves all identified functional and architectural issues. The project now stands on a robust, scalable, and logically sound foundation, perfectly poised for future development and the addition of more complex capabilities.
+
+### 2025-07-08: Final Implementation of the Stateful Information-Gathering Loop
+
+-   **Milestone:** The architecture has been finalized by implementing the last missing piece of the original design: a stateful, iterative information-gathering loop within the Orchestrator.
+-   **Core Enhancement:**
+    -   Following a final, meticulous review against the original user-provided pseudo-code, a `code-developer` sub-task was dispatched to implement the stateful memory loop.
+    -   **Orchestrator (`src/agents/orchestrator.ts`):** The Orchestrator is now a true information-gathering agent. It maintains an internal `memory` object within the graph's state. It uses simple tools like `resolve_date` to parse user input and iteratively populates this `memory`. The entire process is driven by a system prompt that guides the agent through the "ask -> use tool -> update memory" cycle.
+    -   **Graph (`src/graph.ts`):** The graph now fully supports this loop. It correctly injects simple tools into the Orchestrator and ensures that after the `ToolNode` executes, the flow returns to the Orchestrator, which then processes the tool's output to update its `memory`.
+    -   **End Condition:** The loop concludes cleanly when the Orchestrator's `memory` is full, at which point it calls a special `create_subtask` tool to signal its completion and pass the final, structured data to the router.
+-   **Final Impact:** With this last piece in place, the system's architecture is now a complete and accurate implementation of the user's sophisticated design. It is robust, scalable, and correctly separates the concerns of information gathering, task decomposition, and task execution. All known architectural deviations have been resolved.
+
+### 2025-07-08: Graph Stability and Finalization of Specialist Tool-Calling Loop
+
+-   **Milestone:** The entire graph architecture has been stabilized by fixing a critical `UnreachableNodeError` and correctly implementing the tool-calling loop for all specialist agents.
+-   **Final Fixes:**
+    -   Following a final user-reported crash, a `code-developer` sub-task was dispatched to resolve the `UnreachableNodeError`.
+    -   **Root Cause:** The `specialist_tools` node was defined but had no incoming edges. The specialist agent nodes were incorrectly routed directly to `END` without checking for tool calls.
+    -   **Resolution (`src/graph.ts` & `src/state.ts`):**
+        1.  A new `current_specialist` field was added to the `AgentState` to track the active specialist.
+        2.  Conditional routing was added after each specialist node, directing the flow to `specialist_tools` if tool calls are present.
+        3.  A final conditional edge was added after `specialist_tools`, which reads `current_specialist` to dynamically route the execution flow back to the correct specialist, thus completing the loop.
+-   **Final Impact:** The system is now free of compilation errors and is functionally complete according to the final, detailed architecture. All agents at all levels can now correctly and robustly call their respective tools in a stateful, iterative manner. The project has reached a state of architectural integrity and stability.
