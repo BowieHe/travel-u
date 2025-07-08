@@ -25,7 +25,7 @@ export async function createMcpTools(): Promise<{
 
 	for (const toolDef of toolDefsArray) {
 		toolDefs[toolDef.name] = toolDef;
-		console.log("get toolDef:", toolDef);
+		// console.log("get toolDef:", toolDef);
 		const tool = new DynamicStructuredTool({
 			name: toolDef.name, // Already prefixed, e.g., "github_create_issue"
 			description: toolDef.description,
