@@ -113,7 +113,7 @@ describe("createOrchestrator", () => {
 		expect(result.next).toBe("router");
 		expect(result.subtask).toBeDefined();
 		expect(result.subtask).toEqual(subtaskPayload);
-		expect(result.messages).toHaveLength(2);
+		expect(result.messages).toHaveLength(3);
 		const lastMessage = result.messages![1] as AIMessage;
 		expect(lastMessage.tool_calls).toHaveLength(1);
 		expect(lastMessage.tool_calls![0].name).toBe("create_subtask");

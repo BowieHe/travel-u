@@ -22,7 +22,7 @@ coverage/
 junit.xml
 
 # 编辑器/IDE
-.vscode/
+# .vscode/
 .idea/
 *.suo
 *.ntvs*
