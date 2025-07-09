@@ -48,6 +48,7 @@ const specialistDecision = (state: AgentState): "specialist_tools" | "END" => {
 };
 
 export const initializeGraph = async () => {
+	const { tools: mcpTools } = await createMcpTools();
 	// 1. Define the tools for the orchestrator
 	const resolveDateTool = new DynamicStructuredTool({
 		name: "resolve_date",
@@ -95,23 +96,31 @@ export const initializeGraph = async () => {
 	});
 
 	// 3. Create the orchestrator with its tools
-	const orchestratorTools: DynamicStructuredTool[] = [
-		resolveDateTool,
+	const resolveDateTools = mcpTools["time"];
+	let orchestratorTools: DynamicStructuredTool[] = [
+		...resolveDateTools,
 		createSubtaskTool,
 	];
 	const orchestratorAgent = createOrchestrator(orchestratorTools);
 	const orchestratorToolExecutor = new ToolNode(orchestratorTools);
 
 	// 4. Create specialist agents and their tools
-	const { tools: mcpTools } = await createMcpTools();
-	const specialistToolExecutor = new ToolNode(mcpTools);
+	// const specialistToolExecutor = new ToolNode(mcpTools);
+	const transportTools = [
+		...mcpTools["12306-mcp"],
+		...mcpTools["variflight"],
+	];
+	const destinationTools = [...mcpTools["amap-maps"], ...mcpTools["fetch"]];
+	const transportationToolExector = new ToolNode(transportTools);
+	const destinationToolExecutor = new ToolNode(destinationTools);
+
 	const transportationSpecialist = createSpecialistAgent(
-		mcpTools,
-		"You are a specialist in transportation. Your job is to find the best flights, trains, and other transport options based on the user's request."
+		transportTools,
+		"You are a specialist in transportation. Your tools have specific prefixes to indicate their data source. Use tools prefixed with `variflight_` for flight-related queries and tools prefixed with `12306-mcp_` for train-related queries. You MUST select the appropriate tool based on the user's specific request for either flights or trains."
 	);
 	const destinationSpecialist = createSpecialistAgent(
-		mcpTools,
-		"You are a specialist in destinations. Your job is to find interesting places, activities, and create itineraries based on the user's request."
+		destinationTools,
+		"You are a specialist in destinations. Your tools have specific prefixes. Use tools prefixed with `amap-maps_` for location searches and geographical queries. Use tools prefixed with `fetch_` for retrieving general information from web pages. Your job is to find interesting places, activities, and create itineraries based on the user's request."
 	);
 
 	// 5. Define the graph state, including the new 'memory' field
@@ -142,7 +151,8 @@ export const initializeGraph = async () => {
 	const workflow = new StateGraph<AgentState>({ channels: graphState })
 		.addNode("orchestrator", orchestratorAgent)
 		.addNode("tools", orchestratorToolExecutor) // Orchestrator's tools
-		.addNode("specialist_tools", specialistToolExecutor) // Specialists' tools
+		.addNode("transport_tools", transportationToolExector) // Specialists' tools
+		.addNode("destination_tools", destinationToolExecutor) // Specialists' tools
 		.addNode("transportation_specialist", transportationSpecialist)
 		.addNode("destination_specialist", destinationSpecialist)
 		.addNode("router", () => ({}))
@@ -169,21 +179,28 @@ export const initializeGraph = async () => {
 
 		// Conditional edges for specialists to decide on tool use
 		.addConditionalEdges("transportation_specialist", specialistDecision, {
-			specialist_tools: "specialist_tools",
+			specialist_tools: "transport_tools",
 			END: END,
 		})
 		.addConditionalEdges("destination_specialist", specialistDecision, {
-			specialist_tools: "specialist_tools",
+			specialist_tools: "destination_tools",
 			END: END,
 		})
 
 		// After the specialist tools are called, route back to the correct specialist
 		.addConditionalEdges(
-			"specialist_tools",
+			"destination_tools",
+			(state: AgentState) => state.current_specialist ?? "END",
+			{
+				destination_specialist: "destination_specialist",
+				END: END,
+			}
+		)
+		.addConditionalEdges(
+			"transport_tools",
 			(state: AgentState) => state.current_specialist ?? "END",
 			{
 				transportation_specialist: "transportation_specialist",
-				destination_specialist: "destination_specialist",
 				END: END,
 			}
 		);

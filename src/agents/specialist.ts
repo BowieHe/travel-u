@@ -1,4 +1,4 @@
-import { Tool } from "@langchain/core/tools";
+import { DynamicStructuredTool } from "@langchain/core/tools";
 import { createReactAgent } from "@langchain/langgraph/prebuilt";
 import { DeepSeek } from "../models/deepseek";
 import { Runnable } from "@langchain/core/runnables";
@@ -15,7 +15,7 @@ import {
  * @returns A runnable ReAct agent.
  */
 export const createSpecialistAgent = (
-	tools: Tool[],
+	tools: DynamicStructuredTool[],
 	systemMessage: string
 ): Runnable<AgentState, Partial<AgentState>> => {
 	const ds = new DeepSeek();

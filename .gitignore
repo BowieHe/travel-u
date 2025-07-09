@@ -76,3 +76,4 @@ dist-ssr/
 *.code-workspace
 
 qdrant_storage
+.roo/

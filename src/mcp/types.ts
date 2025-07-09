@@ -21,7 +21,8 @@ export interface MCPConfigs {
 }
 
 export interface ToolDefinition {
+	mcpName: string;
 	name: string;
 	description: string;
-	input_schema: object;
+	inputSchema: object;
 }
