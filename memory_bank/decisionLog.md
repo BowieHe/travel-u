@@ -78,3 +78,21 @@
 
     -   **决策:** 强制要求 Agent 在不调用工具时，必须在其返回的 `AIMessage` 状态中将 `tool_calls` 属性显式设置为空数组 (`[]`)。
     -   **理由:** 解决了下游 `ToolNode` 因尝试访问 `undefined.length` 而导致的 `TypeError`。此举确保了无论 Agent 是否调用工具，其输出的状态结构都是一致和可预测的，从而增强了整个 LangGraph 图的稳定性和容错能力。
+
+---
+
+**Decision:** Implement a graceful shutdown mechanism for MCP clients to fix process hanging on exit.
+
+**Date:** 2025-07-09
+
+**Rationale:**
+
+-   The application would not terminate properly after typing "exit" because active MCP client connections were preventing the Node.js event loop from closing.
+-   The fix involved creating a new `shutdown` method in the `McpClientManager` to explicitly disconnect all clients.
+-   This `shutdown` method is now called from the main application loop in `src/index.ts` before the process is supposed to exit, ensuring all resources are released.
+
+**Outcome:**
+
+-   The application now exits cleanly and reliably.
+
+---

@@ -166,3 +166,22 @@
         2.  Conditional routing was added after each specialist node, directing the flow to `specialist_tools` if tool calls are present.
         3.  A final conditional edge was added after `specialist_tools`, which reads `current_specialist` to dynamically route the execution flow back to the correct specialist, thus completing the loop.
 -   **Final Impact:** The system is now free of compilation errors and is functionally complete according to the final, detailed architecture. All agents at all levels can now correctly and robustly call their respective tools in a stateful, iterative manner. The project has reached a state of architectural integrity and stability.
+
+---
+
+**Task:** Fix application hanging on exit
+
+**Description:** The application process would not terminate after the user entered the "exit" command. This was due to active MCP client connections keeping the Node.js event loop alive.
+
+**Completion Date:** 2025-07-09
+
+**Completed By:** NexusCore (coordinated), code-developer (implemented)
+
+**Status:** ✅ **Completed**
+
+**Details:**
+
+-   Added a `shutdown()` method to `McpClientManager` in `src/mcp/mcp-client.ts` to disconnect all clients gracefully.
+-   Called the `shutdown()` method in `src/index.ts` before closing the readline interface to ensure all connections are terminated before exiting.
+
+---

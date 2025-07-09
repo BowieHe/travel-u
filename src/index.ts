@@ -3,7 +3,7 @@ dotenv.config();
 import { HumanMessage } from "@langchain/core/messages";
 import { initializeGraph } from "./graph";
 import readline from "readline";
-import { initFromConfig } from "./mcp/mcp-client";
+import { getMcpClientManager, initFromConfig } from "./mcp/mcp-client";
 
 // Create a readline interface for user input
 const rl = readline.createInterface({
@@ -60,17 +60,26 @@ async function main() {
     console.log("Graph initialized. Welcome to the interactive agent!");
     console.log('Type "exit" to quit.');
 
-    let running = true;
-    while (running) {
+    // Handle Ctrl+C (SIGINT) for graceful shutdown
+    process.on("SIGINT", async () => {
+        console.log("\nCaught interrupt signal. Shutting down gracefully...");
+        await getMcpClientManager().shutdown();
+        rl.close();
+        process.exit(0);
+    });
+
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
         const userInput = await askQuestion("\nYou: ");
         if (userInput.toLowerCase() === "exit") {
-            running = false;
             console.log("Goodbye! 👋");
+            await getMcpClientManager().shutdown();
+            rl.close();
+            process.exit(0);
         } else {
             await runGraph(graph, userInput);
         }
     }
-    rl.close();
 }
 
 main().catch(console.error);
