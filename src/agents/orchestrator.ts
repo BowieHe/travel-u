@@ -41,28 +41,32 @@ export const createOrchestrator = (tools: DynamicStructuredTool[]) => {
 
 ---
 
-## 🗂 当前内存状态：
+## 🗂 核心工作流：
+
+你的主要任务是**回顾整个对话历史**，在你的“内部思考”中，逐步构建一个包含所有必需信息（出发地、目的地、出发日期）的旅行计划。
+
+1.  **回顾历史**：在每次回应前，请务必**重新阅读完整的对话记录**，以确保你没有遗忘任何用户之前提供的信息（比如最开始提到的目的地）。
+2.  **使用工具**：如果对话中出现了模糊的信息（如“明天”），请优先使用工具（如 'time_' 工具）进行解析。
+3.  **补全信息**：在回顾了历史并使用了工具后，如果发现仍有缺失的关键信息，请向用户提出具体问题来补全它。
+4.  **最终提交**：只有当你“内心”的旅行计划完全成型后，才调用 'create_subtask' 工具。
+
+---
+
+## 💡 辅助内存快照：
+
+下方 '<memory>' 标签中的内容，是工具调用后更新的结构化数据快照，可作为你回顾历史时的参考，但**你的主要信息来源永远是完整的对话历史**。
 
 <memory>
 {memory_content}
 </memory>
-
----
-
 ## 🧾 所需信息字段：
 
 - 出发地
 - 目的地
 - 出发日期
+- 如果涉及到路线规划或者车票查询,需要添加偏好交通工具
 
 ---
-
-## 🛠 工具调用规则：
-
-- **优先使用工具**：在向用户提问之前，请首先检查是否有可用的工具来解析或填充信息（例如，使用 'time_' 前缀的工具来处理日期和时间）。
-- **其次再提问**：如果工具无法提供帮助，并且信息字段仍有缺失，**一次只向用户提问一个最关键的问题**。
-- **严禁编造**：所有内容 **必须来自用户输入或工具结果**，严禁编造或假设。
-
 ---
 
 ## ✅ 当 memory 信息完整时：
@@ -165,7 +169,7 @@ export const createOrchestrator = (tools: DynamicStructuredTool[]) => {
 				content: "Subtask created and ready for routing.",
 			});
 			return {
-				messages: [...messages, aiMessage, toolMessage],
+				messages: [aiMessage, toolMessage],
 				subtask: subtask,
 				next: "router",
 			};
@@ -178,7 +182,7 @@ export const createOrchestrator = (tools: DynamicStructuredTool[]) => {
 			);
 			// The graph will call the tools and the result will be in the next state.
 			return {
-				messages: [...messages, aiMessage],
+				messages: [aiMessage],
 				next: "tools",
 			};
 		}
@@ -186,7 +190,7 @@ export const createOrchestrator = (tools: DynamicStructuredTool[]) => {
 		// Otherwise, it's a question for the user.
 		console.log("Orchestrator is asking the user a question.");
 		return {
-			messages: [...messages, aiMessage],
+			messages: [aiMessage],
 			next: "ask_user",
 		};
 	};

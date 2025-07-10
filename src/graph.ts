@@ -1,11 +1,18 @@
-import { START, END, StateGraph, StateGraphArgs } from "@langchain/langgraph";
-import { AgentState } from "./state";
-import { createOrchestrator } from "./agents/orchestrator";
+import {
+	START,
+	END,
+	StateGraph,
+	StateGraphArgs,
+	interrupt,
+} from "@langchain/langgraph";
+import { MemorySaver } from "@langchain/langgraph-checkpoint";
+import { AgentState } from "@/state";
+import { createOrchestrator } from "@/agents/orchestrator";
 import { AIMessage, BaseMessage } from "@langchain/core/messages";
-import { createMcpTools } from "./mcp/mcp-tools";
-import { createSpecialistAgent } from "./agents/specialist";
+import { createMcpTools } from "@/mcp/mcp-tools";
+import { createSpecialistAgent } from "@/agents/specialist";
 import { ToolNode } from "@langchain/langgraph/prebuilt";
-import { DynamicStructuredTool, Tool } from "@langchain/core/tools";
+import { DynamicStructuredTool } from "@langchain/core/tools";
 import { z } from "zod";
 
 // The router function that directs the flow based on the subtask
@@ -156,6 +163,7 @@ export const initializeGraph = async () => {
 		.addNode("transportation_specialist", transportationSpecialist)
 		.addNode("destination_specialist", destinationSpecialist)
 		.addNode("router", () => ({}))
+		.addNode("wait_user", interrupt)
 
 		.addEdge(START, "orchestrator")
 
@@ -165,7 +173,7 @@ export const initializeGraph = async () => {
 			{
 				router: "router",
 				tools: "tools",
-				ask_user: END,
+				ask_user: "wait_user",
 			}
 		)
 
@@ -206,6 +214,7 @@ export const initializeGraph = async () => {
 		);
 
 	// 7. Compile and return the graph
-	const graph = workflow.compile();
+	const checkpointer = new MemorySaver();
+	const graph = workflow.compile({ checkpointer });
 	return graph;
 };
