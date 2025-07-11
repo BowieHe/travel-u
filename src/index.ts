@@ -1,5 +1,5 @@
 import * as dotenv from "dotenv";
-dotenv.config({ override: true });
+dotenv.config();
 import { HumanMessage } from "@langchain/core/messages";
 import { initializeGraph } from "@/graph";
 import readline from "readline";
@@ -13,7 +13,7 @@ const rl = readline.createInterface({
 
 // This is a bit of a trick to get the type of the compiled graph.
 // `initializeGraph` is async, so we use `Awaited` to get the promise's resolved type.
-// type CompiledGraph = Awaited<ReturnType<typeof initializeGraph>>;
+type CompiledGraph = Awaited<ReturnType<typeof initializeGraph>>;
 
 /**
  * Asks the user a question and returns their input.
@@ -27,6 +27,8 @@ function askQuestion(question: string): Promise<string> {
 		});
 	});
 }
+
+import { BaseMessage } from "@langchain/core/messages";
 
 async function main() {
 	// 1. Initialize MCP Client Manager FIRST

@@ -14,9 +14,6 @@ import { createSpecialistAgent } from "@/agents/specialist";
 import { ToolNode } from "@langchain/langgraph/prebuilt";
 import { DynamicStructuredTool } from "@langchain/core/tools";
 import { z } from "zod";
-import { createSummarizer } from "@/agents/summarizer";
-
-// New Summarizer Agent
 
 // The router function that directs the flow based on the subtask
 const router = (state: AgentState) => {
@@ -24,14 +21,17 @@ const router = (state: AgentState) => {
 	if (state.subtask) {
 		console.log(`Routing to: ${state.subtask.topic}`);
 		if (state.subtask.topic === "transportation") {
+			// Set the current specialist before routing
 			state.current_specialist = "transportation_specialist";
 			return "transportation_specialist";
 		}
 		if (state.subtask.topic === "destination") {
+			// Set the current specialist before routing
 			state.current_specialist = "destination_specialist";
 			return "destination_specialist";
 		}
 	}
+	// Default fallback
 	return "END";
 };
 
@@ -40,6 +40,7 @@ const specialistDecision = (state: AgentState): "specialist_tools" | "END" => {
 	console.log("---SPECIALIST DECISION---");
 	const lastMessage = state.messages[state.messages.length - 1];
 
+	// Check if the last message is an AIMessage and has tool calls
 	if (
 		lastMessage instanceof AIMessage &&
 		lastMessage.tool_calls &&
@@ -55,6 +56,26 @@ const specialistDecision = (state: AgentState): "specialist_tools" | "END" => {
 
 export const initializeGraph = async () => {
 	const { tools: mcpTools } = await createMcpTools();
+	// 1. Define the tools for the orchestrator
+	const resolveDateTool = new DynamicStructuredTool({
+		name: "resolve_date",
+		description:
+			"Resolves a natural language date into a machine-readable format.",
+		schema: z.object({
+			date: z
+				.string()
+				.describe(
+					"The natural language date, e.g., 'tomorrow' or 'next Friday'"
+				),
+		}),
+		func: async ({ date }) => {
+			// In a real app, this would use a date parsing library
+			console.log(`Simulating date resolution for: ${date}`);
+			return JSON.stringify({ date: "2025-08-08" }); // Return a fixed date for simplicity
+		},
+	});
+
+	// 2. Define the tools for the orchestrator
 	const createSubtaskTool = new DynamicStructuredTool({
 		name: "create_subtask",
 		description:
@@ -76,17 +97,22 @@ export const initializeGraph = async () => {
 			}),
 		}),
 		func: async ({ subtask }) => {
+			// The tool's function is just to return the structured data.
 			return JSON.stringify(subtask);
 		},
 	});
 
-	const orchestratorTools: DynamicStructuredTool[] = [
-		...mcpTools["time"],
+	// 3. Create the orchestrator with its tools
+	const resolveDateTools = mcpTools["time"];
+	let orchestratorTools: DynamicStructuredTool[] = [
+		...resolveDateTools,
 		createSubtaskTool,
 	];
 	const orchestratorAgent = createOrchestrator(orchestratorTools);
 	const orchestratorToolExecutor = new ToolNode(orchestratorTools);
 
+	// 4. Create specialist agents and their tools
+	// const specialistToolExecutor = new ToolNode(mcpTools);
 	const transportTools = [
 		...mcpTools["12306-mcp"],
 		...mcpTools["variflight"],
@@ -104,14 +130,10 @@ export const initializeGraph = async () => {
 		"You are a specialist in destinations. Your tools have specific prefixes. Use tools prefixed with `amap-maps_` for location searches and geographical queries. Use tools prefixed with `fetch_` for retrieving general information from web pages. Your job is to find interesting places, activities, and create itineraries based on the user's request."
 	);
 
+	// 5. Define the graph state, including the new 'memory' field
 	const graphState: StateGraphArgs<AgentState>["channels"] = {
 		messages: {
-			value: (x: BaseMessage[], y: BaseMessage[]) => {
-				// if (y.length < x.length) {
-				// 	return y;
-				// }
-				return x.concat(y);
-			},
+			value: (x: BaseMessage[], y: BaseMessage[]) => x.concat(y),
 			default: () => [],
 		},
 		next: {
@@ -126,54 +148,44 @@ export const initializeGraph = async () => {
 			value: (x, y) => ({ ...x, ...y }),
 			default: () => ({}),
 		},
-		summary: {
-			value: (_x, y) => y,
-			default: () => "",
-		},
 		current_specialist: {
 			value: (x, y) => y ?? x,
 			default: () => "END",
 		},
 	};
 
-	const summarizerAgent = createSummarizer();
-
+	// 6. Build the graph with the new architecture
 	const workflow = new StateGraph<AgentState>({ channels: graphState })
 		.addNode("orchestrator", orchestratorAgent)
-		.addNode("tools", orchestratorToolExecutor)
-		.addNode("transport_tools", transportationToolExector)
-		.addNode("destination_tools", destinationToolExecutor)
+		.addNode("tools", orchestratorToolExecutor) // Orchestrator's tools
+		.addNode("transport_tools", transportationToolExector) // Specialists' tools
+		.addNode("destination_tools", destinationToolExecutor) // Specialists' tools
 		.addNode("transportation_specialist", transportationSpecialist)
 		.addNode("destination_specialist", destinationSpecialist)
+		.addNode("router", () => ({}))
 		.addNode("wait_user", interrupt)
-		.addNode("summarizer", summarizerAgent);
 
-	// The graph now starts directly at the orchestrator
-	workflow.addEdge(START, "orchestrator");
-	workflow.addEdge("summarizer", "orchestrator"); // After summarizing, return to the orchestrator
-	workflow.addEdge("tools", "orchestrator");
+		.addEdge(START, "orchestrator")
 
-	// The orchestrator's conditional edges now handle all primary routing
-	workflow.addConditionalEdges(
-		"orchestrator",
-		(state: AgentState) => {
-			if (state.next === "router") {
-				return router(state); // Call the router function to decide the specialist
+		.addConditionalEdges(
+			"orchestrator",
+			(state: AgentState) => state.next,
+			{
+				router: "router",
+				tools: "tools",
+				ask_user: "wait_user",
 			}
-			return state.next; // Otherwise, follow the 'next' state
-		},
-		{
-			summarizer: "summarizer",
+		)
+
+		.addConditionalEdges("router", router, {
 			transportation_specialist: "transportation_specialist",
 			destination_specialist: "destination_specialist",
-			tools: "tools",
-			ask_user: "wait_user",
 			END: END,
-		}
-	);
+		})
 
-	// Conditional edges for specialists remain the same
-	workflow
+		.addEdge("tools", "orchestrator") // Loop back to the orchestrator after tool execution
+
+		// Conditional edges for specialists to decide on tool use
 		.addConditionalEdges("transportation_specialist", specialistDecision, {
 			specialist_tools: "transport_tools",
 			END: END,
@@ -182,6 +194,8 @@ export const initializeGraph = async () => {
 			specialist_tools: "destination_tools",
 			END: END,
 		})
+
+		// After the specialist tools are called, route back to the correct specialist
 		.addConditionalEdges(
 			"destination_tools",
 			(state: AgentState) => state.current_specialist ?? "END",
@@ -199,6 +213,7 @@ export const initializeGraph = async () => {
 			}
 		);
 
+	// 7. Compile and return the graph
 	const checkpointer = new MemorySaver();
 	const graph = workflow.compile({ checkpointer });
 	return graph;
