@@ -9,10 +9,12 @@ export type AgentNode =
 	| "destination_specialist"
 	| "tools"
 	| "router"
-	| "ask_user";
+	| "ask_user"
+	| "summarizer";
 
 export interface AgentState {
 	messages: Array<BaseMessage>;
+	summary: string;
 	next: AgentNode | "END";
 	subtask?: any;
 	memory: Record<string, any>;

@@ -1,169 +1,111 @@
 import { AgentState } from "../state";
-import { Tool, DynamicStructuredTool } from "@langchain/core/tools";
-import { DeepSeek } from "../models/deepseek";
+import { DynamicStructuredTool } from "@langchain/core/tools";
 import {
 	AIMessage,
 	SystemMessage,
 	ToolMessage,
 } from "@langchain/core/messages";
+import { get_encoding } from "tiktoken";
+import { DeepSeek } from "../models/deepseek";
+
+const encoding = get_encoding("cl100k_base");
+const CONTEXT_THRESHOLD = 2000; // Token threshold to trigger summarization
 
 /**
- * The orchestrator is a stateful information collector.
- * Its goal is to use tools to iteratively build up a 'memory' object.
- * Once the memory is complete, it synthesizes it into a 'subtask' JSON object.
+ * The orchestrator is now the central decision-making unit.
+ * It first assesses the context length and decides if a summary is needed.
+ * Then, it operates on a rolling summary, a structured memory object,
+ * and the latest user messages to decide the next action.
  */
 export const createOrchestrator = (tools: DynamicStructuredTool[]) => {
 	const ds = new DeepSeek();
-	// Bind the tools to the model
 	const model = ds.llm("deepseek-chat").withConfig({
 		tools: tools,
 		tool_choice: "auto",
 	});
 
-	// The system message defines the agent's objective
-	const systemMessage = new SystemMessage({
-		// 		content: `你是一个旅游智能调度器。你的目标是逐步收集用户的关键信息（目的地、出发日期、出发地），并将它们填充到一个内部的 'memory' 对象中。
-		// 你当前的 memory 如下:
-		// <memory>
-		// {memory_content}
-		// </memory>
-
-		// - **如果信息不完整**: 继续向用户提问以获取缺失的信息，或者使用工具（例如 \`resolve_date\`）来解析和填充 'memory'。
-		// - **如果信息完整**: 当 'memory' 中的所有必需信息都收集完毕后，**分析用户的整体意图来决定任务的主题（'topic'）**，然后调用 \`create_subtask\` 工具，将完整的 'memory' 内容连同推断出的 'topic' 一起作为 \`subtask\` 参数提交。
-		// - **不要自己编造信息**: 只能使用用户提供的信息或工具返回的结果。`,
-		content: `你是一个旅游智能调度器 Agent，运行于一个多 Agent 编排系统中。
-
-你的职责是：
-→ **逐步引导用户完成关键信息填充**  
-→ **推断本次任务的主题与目标**  
-→ **生成并提交子任务列表**（供子 Agent 顺序执行）  
-→ **最终整合所有子任务的返回结果，输出完整的旅游建议**
-
----
-
-## 🗂 核心工作流：
-
-你的主要任务是**回顾整个对话历史**，在你的“内部思考”中，逐步构建一个包含所有必需信息（出发地、目的地、出发日期）的旅行计划。
-
-1.  **回顾历史**：在每次回应前，请务必**重新阅读完整的对话记录**，以确保你没有遗忘任何用户之前提供的信息（比如最开始提到的目的地）。
-2.  **使用工具**：如果对话中出现了模糊的信息（如“明天”），请优先使用工具（如 'time_' 工具）进行解析。
-3.  **补全信息**：在回顾了历史并使用了工具后，如果发现仍有缺失的关键信息，请向用户提出具体问题来补全它。
-4.  **最终提交**：只有当你“内心”的旅行计划完全成型后，才调用 'create_subtask' 工具。
-
----
-
-## 💡 辅助内存快照：
-
-下方 '<memory>' 标签中的内容，是工具调用后更新的结构化数据快照，可作为你回顾历史时的参考，但**你的主要信息来源永远是完整的对话历史**。
-
-<memory>
-{memory_content}
-</memory>
-## 🧾 所需信息字段：
-
-- 出发地
-- 目的地
-- 出发日期
-- 如果涉及到路线规划或者车票查询,需要添加偏好交通工具
-
----
----
-
-## ✅ 当 memory 信息完整时：
-
-1. **推断本次出行的主题 topic**（如“周末杭州亲子游”）。
-2. 基于 memory 和 topic，调用 'create_subtask' 工具，提交两个子任务：
-
-### 子任务定义如下：
-
-#### 1️⃣ 路线交通规划任务（travel_route）
-- 目标：规划从出发地到目的地的交通方式与路线。
-- 示例 prompt 给下游 Agent：
-  > 请帮我规划从上海到苏州的交通方式，出发时间为 8 月 2 日。
-
-#### 2️⃣ 景点与餐饮推荐任务（poi_recommendation）
-- 目标：推荐目的地周边的主要景点与优质餐厅。
-- 示例 prompt 给下游 Agent：
-  > 我打算 8 月 2 日从上海去苏州旅游，请推荐苏州当地值得去的景点与餐厅。
-
-### 提交格式示例：
-
-\`\`\`json
-{
-  "memory": {
-    "出发地": "上海",
-    "目的地": "苏州",
-    "出发日期": "2025-08-02"
-  },
-  "topic": "苏州一日游",
-  "subtasks": [
-    {
-      "type": "travel_route",
-      "input": "请规划从上海到苏州的交通方式，出发时间为 8 月 2 日。"
-    },
-    {
-      "type": "poi_recommendation",
-      "input": "请推荐苏州在 8 月 2 日适合游客的景点与餐厅。"
-    }
-  ]
-}`,
-	});
-
 	return async (state: AgentState): Promise<Partial<AgentState>> => {
 		console.log("---ORCHESTRATOR---");
-		let { messages, memory } = state;
+		const { messages, memory, summary } = state;
 
-		// **Core Logic**: Update memory from the last tool call if it exists.
-		const lastMessage = messages[messages.length - 1];
-		if (lastMessage instanceof ToolMessage) {
-			console.log(
-				"Orchestrator is updating memory from tool call result with tool output.",
-				lastMessage.content
-			);
-			// This is a simplified merge. A real implementation might need more sophisticated logic.
-			try {
-				const toolOutput = JSON.parse(lastMessage.content as string);
-				// Update memory with the new information from the tool.
-				memory = { ...memory, ...toolOutput };
-			} catch (e) {
-				console.warn(
-					"Tool output was not valid JSON, skipping memory update.",
-					e
-				);
-			}
+		// 1. Calculate token count from messages and summary
+		const tokenCount = encoding.encode(
+			summary + JSON.stringify(messages)
+		).length;
+		console.log(`Orchestrator token count: ${tokenCount}`);
+
+		// 2. If token count exceeds threshold, delegate to summarizer
+		if (tokenCount > CONTEXT_THRESHOLD) {
+			console.log("Context exceeds threshold, delegating to summarizer.");
+			return { next: "summarizer" };
 		}
 
-		// Prepare messages for the model, injecting the current memory state.
-		const memoryContent = JSON.stringify(memory, null, 2);
-		const systemMessageWithMemory = new SystemMessage({
-			content: (systemMessage.content as string).replace(
-				"{memory_content}",
-				memoryContent
-			),
+		// 3. Construct the dynamic system prompt
+		const systemMessage = new SystemMessage({
+			content: `You are a travel intelligence orchestrator Agent. Your goal is to guide the user to provide key information, infer the task's topic, generate a subtask list, and finally integrate the results to provide complete travel advice.
+
+---
+## 📜 Conversation Summary (Historical Context)
+This is a summary of the conversation so far. Use it to understand the background.
+<summary>
+${summary}
+</summary>
+
+---
+## 🗂️ Structured Memory (Confirmed Facts)
+This is a JSON object of confirmed facts. This is your source of truth.
+<memory>
+${JSON.stringify(memory, null, 2)}
+</memory>
+
+---
+## 🎯 Core Workflow & Decision Making
+
+### 1. Information Gathering
+Your primary goal is to fill the \`memory\` with the following required fields:
+-   **departure_location**: The starting point of the journey.
+-   **destination_location**: The final destination.
+-   **departure_date**: The date of departure.
+-   **transportation_preference**: (Optional) The user's preferred mode of transport if route planning is involved.
+
+**Decision Flow:**
+-   **Analyze**: First, check the \`memory\` and the latest user message to see which fields are missing.
+-   **Tool First**: If the user provides ambiguous information (e.g., "tomorrow"), use a tool to resolve it to a concrete value first.
+-   **Ask Next**: If information is still missing, ask the user for **one** crucial missing piece of information. Be specific.
+
+### 2. Subtask Creation (When Memory is Complete)
+Once all required information is present in \`memory\`:
+1.  **Infer Topic**: Deduce a concise trip \`topic\` (e.g., "Weekend trip to Hangzhou for a family").
+2.  **Call \`create_subtask\`**: Use the \`create_subtask\` tool to generate TWO subtasks based on the topic and memory.
+
+#### Subtask Definitions:
+
+**A. Transportation Route Task (\`travel_route\`)**
+-   **Goal**: Plan the travel route and method from departure to destination.
+-   **Example Input for Agent**: "Please plan the transportation from Shanghai to Suzhou, departing on August 2nd."
+
+**B. POI & Restaurant Recommendation Task (\`poi_recommendation\`)**
+-   **Goal**: Recommend key points of interest and quality restaurants at the destination.
+-   **Example Input for Agent**: "I'm traveling from Shanghai to Suzhou on August 2nd. Please recommend attractions and restaurants."
+
+---
+## 💬 Current Conversation (Latest User Messages)
+This is the most recent part of the conversation. Focus on the user's latest message to decide your next action based on the workflow above.
+`,
 		});
 
-		const newMessages = [systemMessageWithMemory, ...messages];
-
-		// Invoke the model with the updated state.
-		const result = await model.invoke(newMessages);
+		// 4. Invoke the model with the full context
+		const result = await model.invoke([systemMessage, ...messages]);
 		const aiMessage = result as AIMessage;
 
-		console.log("get ai response in orchestrator:", aiMessage.content);
-
-		// Check if the model decided to create the subtask.
+		// 5. Decide the next step based on the model's response
 		const subtaskToolCall = aiMessage.tool_calls?.find(
-			(toolCall) => toolCall.name === "create_subtask"
+			(tc) => tc.name === "create_subtask"
 		);
 
 		if (subtaskToolCall) {
-			console.log(
-				"Orchestrator collected all information and is creating a subtask."
-			);
+			console.log("Orchestrator is creating a subtask.");
 			const subtask = subtaskToolCall.args.subtask;
-			// We must provide a tool message response to the tool call.
-			// This is a "fake" response that indicates the subtask was created.
-			// The key is to include a ToolMessage with the same tool_call_id
-			// as the one in the AIMessage. This makes the history valid.
 			const toolMessage = new ToolMessage({
 				tool_call_id: subtaskToolCall.id ?? "",
 				content: "Subtask created and ready for routing.",
@@ -175,19 +117,14 @@ export const createOrchestrator = (tools: DynamicStructuredTool[]) => {
 			};
 		}
 
-		// Check for other tool calls to populate the memory.
 		if (aiMessage.tool_calls && aiMessage.tool_calls.length > 0) {
-			console.log(
-				"Orchestrator decided to call a tool to populate memory."
-			);
-			// The graph will call the tools and the result will be in the next state.
+			console.log("Orchestrator is calling a tool.");
 			return {
 				messages: [aiMessage],
 				next: "tools",
 			};
 		}
 
-		// Otherwise, it's a question for the user.
 		console.log("Orchestrator is asking the user a question.");
 		return {
 			messages: [aiMessage],
