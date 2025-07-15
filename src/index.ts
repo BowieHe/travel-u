@@ -1,5 +1,5 @@
 import * as dotenv from "dotenv";
-dotenv.config();
+dotenv.config({ override: true });
 import { HumanMessage } from "@langchain/core/messages";
 import { initializeGraph } from "@/graph";
 import readline from "readline";

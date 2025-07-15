@@ -1,28 +1,24 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { createOrchestrator } from "../../src/agents/orchestrator";
 import { AgentState } from "../../src/state";
 import { HumanMessage, AIMessage, ToolMessage } from "@langchain/core/messages";
 import { DynamicStructuredTool } from "@langchain/core/tools";
 import { z } from "zod";
-import * as deepseek from "../../src/models/deepseek";
 
-// Mock the DeepSeek class
-const mockInvoke = vi.fn();
-vi.mock("../../src/models/deepseek", () => {
-	return {
-		DeepSeek: vi.fn().mockImplementation(() => {
-			return {
-				llm: () => ({
-					bind: () => ({
-						invoke: mockInvoke,
-					}),
-				}),
-			};
-		}),
-	};
-});
+// Mock the createReactAgent function from @langchain/langgraph/prebuilt
+const mockAgentExecutorInvoke = vi.fn();
+vi.mock("@langchain/langgraph/prebuilt", () => ({
+	createReactAgent: vi.fn().mockImplementation(() => ({
+		invoke: mockAgentExecutorInvoke,
+	})),
+}));
 
 describe("createOrchestrator", () => {
+	beforeEach(() => {
+		// Clear mock history before each test
+		mockAgentExecutorInvoke.mockClear();
+	});
+
 	// Define the tools used by the orchestrator, mirroring graph.ts
 	const createSubtaskTool = new DynamicStructuredTool({
 		name: "create_subtask",
@@ -47,32 +43,48 @@ describe("createOrchestrator", () => {
 		func: async ({ subtask }) => JSON.stringify(subtask),
 	});
 
-	const tools = [createSubtaskTool];
+	const resolveDateTool = new DynamicStructuredTool({
+		name: "resolve_date",
+		description:
+			"Resolves a human-readable date to a machine-readable format.",
+		schema: z.object({
+			date_string: z
+				.string()
+				.describe("The human-readable date, e.g., 'tomorrow'"),
+		}),
+		func: async ({ date_string }) => `{"departure_date": "2025-09-11"}`, // Mocked response
+	});
+
+	const tools = [createSubtaskTool, resolveDateTool];
 	const orchestratorAgent = createOrchestrator(tools);
 
 	it("should ask a question if memory is incomplete", async () => {
-		// Mock the LLM to return a simple text response
-		mockInvoke.mockResolvedValue(
-			new AIMessage({
-				content: "Where would you like to go?",
-			})
-		);
+		// Mock the agent executor to return a simple text response
+		mockAgentExecutorInvoke.mockResolvedValue({
+			messages: [
+				new AIMessage({
+					content: "Where would you like to go?",
+				}),
+			],
+		});
 
 		const initialState: AgentState = {
 			messages: [new HumanMessage("I want to book a trip.")],
 			memory: { origin: "New York" }, // Incomplete memory
 			next: "orchestrator",
+			tripPlan: {},
 		};
 
 		const result = await orchestratorAgent(initialState);
 
 		expect(result.next).toBe("ask_user");
-		expect(result.messages).toHaveLength(2);
-		const lastMessage = result.messages![1] as AIMessage;
+		expect(result.messages).toHaveLength(1);
+		const lastMessage = result.messages![0] as AIMessage;
 		expect(lastMessage.content).toBe("Where would you like to go?");
+		expect(lastMessage.tool_calls).toBeUndefined();
 	});
 
-	it("should call create_subtask with the correct topic when memory is complete", async () => {
+	it("should call create_subtask when memory is complete", async () => {
 		const subtaskPayload = {
 			topic: "transportation",
 			destination: "Paris",
@@ -80,19 +92,21 @@ describe("createOrchestrator", () => {
 			origin: "New York",
 		};
 
-		// Mock the LLM to call the create_subtask tool
-		mockInvoke.mockResolvedValue(
-			new AIMessage({
-				content: "",
-				tool_calls: [
-					{
-						name: "create_subtask",
-						args: { subtask: subtaskPayload },
-						id: "tool-call-id-123",
-					},
-				],
-			})
-		);
+		// Mock the agent executor to call the create_subtask tool
+		mockAgentExecutorInvoke.mockResolvedValue({
+			messages: [
+				new AIMessage({
+					content: "",
+					tool_calls: [
+						{
+							name: "create_subtask",
+							args: { subtask: subtaskPayload },
+							id: "tool-call-id-123",
+						},
+					],
+				}),
+			],
+		});
 
 		const initialState: AgentState = {
 			messages: [
@@ -106,6 +120,7 @@ describe("createOrchestrator", () => {
 				origin: "New York",
 			},
 			next: "orchestrator",
+			tripPlan: {},
 		};
 
 		const result = await orchestratorAgent(initialState);
@@ -113,68 +128,106 @@ describe("createOrchestrator", () => {
 		expect(result.next).toBe("router");
 		expect(result.subtask).toBeDefined();
 		expect(result.subtask).toEqual(subtaskPayload);
-		expect(result.messages).toHaveLength(3);
-		const lastMessage = result.messages![1] as AIMessage;
-		expect(lastMessage.tool_calls).toHaveLength(1);
-		expect(lastMessage.tool_calls![0].name).toBe("create_subtask");
+		expect(result.messages).toHaveLength(2); // AIMessage + ToolMessage
+
+		const aiMessage = result.messages![0] as AIMessage;
+		expect(aiMessage.tool_calls).toHaveLength(1);
+		expect(aiMessage.tool_calls![0].name).toBe("create_subtask");
+
+		const toolMessage = result.messages![1] as ToolMessage;
+		expect(toolMessage.tool_call_id).toBe("tool-call-id-123");
+		expect(toolMessage.content).toBe(
+			"Subtask created and ready for routing."
+		);
 	});
 
-	it("should return AIMessage and ToolMessage pair on create_subtask call", async () => {
-		const toolCallId = "tool-call-id-test-12345";
-		const subtaskPayload = {
-			topic: "destination",
-			destination: "Tokyo",
-			departure_date: "2025-12-20",
-			origin: "San Francisco",
-		};
-
-		// Mock the LLM to return a tool call for create_subtask
-		mockInvoke.mockResolvedValue(
-			new AIMessage({
-				content: "",
-				tool_calls: [
-					{
-						name: "create_subtask",
-						args: { subtask: subtaskPayload },
-						id: toolCallId,
-					},
-				],
-			})
-		);
+	it("should call a regular tool if more information is needed", async () => {
+		// Mock the agent executor to call the resolve_date tool
+		mockAgentExecutorInvoke.mockResolvedValue({
+			messages: [
+				new AIMessage({
+					content: "",
+					tool_calls: [
+						{
+							name: "resolve_date",
+							args: { date_string: "tomorrow" },
+							id: "tool-call-id-456",
+						},
+					],
+				}),
+			],
+		});
 
 		const initialState: AgentState = {
-			messages: [new HumanMessage("I want to go to Tokyo in December.")],
-			memory: {
-				destination: "Tokyo",
-				departure_date: "2025-12-20",
-				origin: "San Francisco",
-			},
+			messages: [new HumanMessage("I want to go to LA tomorrow.")],
+			memory: { destination: "LA" },
 			next: "orchestrator",
+			tripPlan: {},
 		};
 
 		const result = await orchestratorAgent(initialState);
 
-		// Verify the next state and subtask
-		expect(result.next).toBe("router");
-		expect(result.subtask).toEqual(subtaskPayload);
+		expect(result.next).toBe("tools");
+		expect(result.subtask).toBeUndefined();
+		expect(result.messages).toHaveLength(1);
 
-		// Verify the message history
-		expect(result.messages).toHaveLength(3);
-		const [humanMessage, aiMessage, toolMessage] = result.messages!;
+		const aiMessage = result.messages![0] as AIMessage;
+		expect(aiMessage.tool_calls).toHaveLength(1);
+		expect(aiMessage.tool_calls![0].name).toBe("resolve_date");
+		expect(aiMessage.tool_calls![0].args).toEqual({
+			date_string: "tomorrow",
+		});
+	});
 
-		// Check the AI Message
-		expect(aiMessage).toBeInstanceOf(AIMessage);
-		const typedAiMessage = aiMessage as AIMessage;
-		expect(typedAiMessage.tool_calls).toHaveLength(1);
-		expect(typedAiMessage.tool_calls![0].id).toBe(toolCallId);
-		expect(typedAiMessage.tool_calls![0].name).toBe("create_subtask");
+	it("should update memory from a tool call result", async () => {
+		// This test simulates the state *after* a tool has been called.
+		// The orchestrator should update its memory with the tool's output.
+		mockAgentExecutorInvoke.mockResolvedValue({
+			messages: [
+				new AIMessage({
+					content:
+						"Okay, got the date. Where are you departing from?",
+				}),
+			],
+		});
 
-		// Check the Tool Message
-		expect(toolMessage).toBeInstanceOf(ToolMessage);
-		const typedToolMessage = toolMessage as ToolMessage;
-		expect(typedToolMessage.tool_call_id).toBe(toolCallId);
-		expect(typedToolMessage.content).toBe(
-			"Subtask created and ready for routing."
+		const initialState: AgentState = {
+			messages: [
+				new HumanMessage("I want to go to LA tomorrow."),
+				// This AIMessage would have been generated in the previous step
+				new AIMessage({
+					content: "",
+					tool_calls: [
+						{
+							name: "resolve_date",
+							args: { date_string: "tomorrow" },
+							id: "tool-call-id-789",
+						},
+					],
+				}),
+				// This ToolMessage is the result of the graph executing the tool
+				new ToolMessage({
+					tool_call_id: "tool-call-id-789",
+					content: JSON.stringify({ departure_date: "2025-09-11" }),
+				}),
+			],
+			memory: { destination: "LA" }, // Memory before the update
+			next: "orchestrator",
+			tripPlan: {},
+		};
+
+		await orchestratorAgent(initialState);
+
+		// Verify that the agent executor was called with the updated memory
+		const callArgs = mockAgentExecutorInvoke.mock.calls[0][0];
+		const systemMessageWithMemory = callArgs.messages[0];
+		const memoryInSystemMessage = JSON.parse(
+			systemMessageWithMemory.content
 		);
+
+		expect(memoryInSystemMessage).toEqual({
+			destination: "LA",
+			departure_date: "2025-09-11",
+		});
 	});
 });
