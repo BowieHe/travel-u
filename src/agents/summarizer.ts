@@ -1,58 +1,55 @@
 import { DeepSeek } from "@/models/deepseek";
 import { AgentState } from "@/state";
-import { SystemMessage } from "@langchain/core/messages";
-import { z } from "zod";
+import {
+    SystemMessage,
+    AIMessage,
+    ToolMessage,
+} from "@langchain/core/messages";
+import { TRAVEL_AGENT_PROMPT } from "./prompt";
 
 export const createSummarizer = () => {
-	const ds = new DeepSeek();
-	const model = ds.llm("deepseek-chat");
+    const ds = new DeepSeek();
+    const model = ds.llm("deepseek-chat");
 
-	const summarizationSchema = z.object({
-		summary: z
-			.string()
-			.describe(
-				"A concise summary of the conversation, integrating the previous summary with the new messages."
-			),
-		memory: z
-			//.record(z.any())
-			.object({
-				出发地: z.string().optional().nullable(),
-				目的地: z.string().optional().nullable(),
-				出发日期: z.string().optional().nullable(),
-				偏好交通工具: z.string().optional().nullable(),
-				其余信息: z.string().optional().nullable(),
-			})
-			.describe(
-				"An object containing the most up-to-date and complete key information, merging the old memory with new information from the conversation."
-			),
-	});
+    // 创建一个总结函数
+    const summarize = async (state: AgentState) => {
+        const messages = state.messages;
 
-	const summarizerModel = model.withStructuredOutput(summarizationSchema);
+        // 过滤出所有专家的回答和工具调用结果
+        const relevantMessages = messages.filter(
+            (msg) =>
+                msg instanceof AIMessage ||
+                (msg instanceof ToolMessage && msg.content)
+        );
 
-	return async (state: AgentState): Promise<Partial<AgentState>> => {
-		console.log("---SUMMARIZER---");
-		const { messages, memory, summary } = state;
+        const systemPrompt = new SystemMessage(
+            `你是一个旅行规划助手的总结员。你的任务是:
+            1. 分析所有专家（交通专家和目的地专家）的建议和工具调用结果
+            2. 将这些信息整理成一个连贯、易于理解的旅行计划
+            3. 使用自然、友好的语言，重点突出：
+               - 交通方案（包括时间、方式、价格等）
+               - 目的地推荐（包括景点、美食等）
+               - 实用的建议和提示
+            4. 如果发现信息有冲突或不完整，要明确指出`
+        );
 
-		// Intelligent separation: The last message is the current task, the rest is history.
-		const messagesToSummarize = messages.slice(0, -1);
-		const latestMessage = messages[messages.length - 1];
+        try {
+            const result = await model.invoke([
+                systemPrompt,
+                ...relevantMessages,
+            ]);
 
-		const systemMessage = new SystemMessage(
-			`You are an expert conversation summarizer. Your goal is to create a new summary and a new memory object by merging the provided history.
-- The previous summary is: "${summary}"
-- The existing memory is: ${JSON.stringify(memory)}
-- The new messages to incorporate are: ${JSON.stringify(messagesToSummarize)}
-- Based on all this information, create a new, comprehensive summary.
-- Then, create a new, comprehensive memory object, ensuring you carry over all existing information and only update it with newer information from the messages.`
-		);
+            return result;
+        } catch (error) {
+            console.error("总结生成失败:", error);
+            return {
+                content:
+                    "抱歉，我在总结旅行计划时遇到了问题。请检查专家提供的建议是否完整。",
+            };
+        }
+    };
 
-		const result = await summarizerModel.invoke([systemMessage]);
-
-		// Return only the latest message to keep the context clean for the orchestrator
-		return {
-			summary: result.summary,
-			memory: result.memory,
-			messages: [latestMessage],
-		};
-	};
+    return {
+        summarize,
+    };
 };
