@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { RunnableAgent } from "../../src/agents/base";
-import type { AgentState } from "../../src/state";
+import type { AgentState } from "../../src/types/state";
 import { HumanMessage } from "@langchain/core/messages";
 
 // Create a concrete class for testing the abstract class

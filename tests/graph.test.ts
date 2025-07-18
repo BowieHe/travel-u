@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { initializeGraph } from "../src/graph";
+import { initializeGraph } from "../src/graph/graph";
 import { AIMessage, HumanMessage, ToolMessage } from "@langchain/core/messages";
 import { DeepSeek } from "../src/models/deepseek";
 import { initFromConfig } from "../src/mcp/mcp-client";

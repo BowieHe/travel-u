@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { createOrchestrator } from "../../src/agents/orchestrator";
-import { AgentState } from "../../src/state";
+import { AgentState } from "../../src/types/state";
 import { HumanMessage, AIMessage, ToolMessage } from "@langchain/core/messages";
 import { DynamicStructuredTool } from "@langchain/core/tools";
 import { z } from "zod";

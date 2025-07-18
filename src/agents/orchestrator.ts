@@ -1,16 +1,19 @@
 import { DynamicStructuredTool } from "@langchain/core/tools";
-import { createReactAgent } from "@langchain/langgraph/prebuilt";
 import { Gemini } from "@/models/gemini";
 import { z } from "zod";
-import { TRAVEL_AGENT_PROMPT } from "./prompt";
+import { AgentState } from "@/types/type";
+import {
+	AIMessage,
+	SystemMessage,
+	ToolMessage,
+} from "@langchain/core/messages";
 
 /**
- * Creates a ReAct agent that will function as the orchestrator.
- * This agent's primary goal is to gather information and then call
- * the 'create_subtask' tool once all necessary information is collected.
+ * Creates a regular orchestrator node that handles tool calls directly.
+ * This replaces the ReAct agent with a more controlled approach.
  *
  * @param tools The list of tools the agent can use, including 'create_subtask'.
- * @returns A compiled agent executor runnable.
+ * @returns A node function that can be used in the graph.
  */
 export const createOrchestrator = (tools: DynamicStructuredTool[]) => {
 	const llm = new Gemini();
@@ -23,8 +26,8 @@ export const createOrchestrator = (tools: DynamicStructuredTool[]) => {
 → **在所有信息集齐后，调用generate_task_prompt工具生成结构化任务指令**
 
 ---
-## 🗂 核心工作流 (ReAct模式)：
-你的主要任务是**回顾整个对话历史**和**当前的memory快照**，通过"思考->行动"的循环，逐步构建一个包含所有必需信息的旅行计划。
+## 🗂 核心工作流：
+你的主要任务是**回顾整个对话历史**和**当前的memory快照**，逐步构建一个包含所有必需信息的旅行计划。
 
 1.  **回顾历史与记忆**: 在每次回应前，务必**重新阅读完整的对话记录**和下方 **<memory> 快照**，确保你没有遗漏任何关键信息。
 2.  **思考**: 根据现有信息，判断下一步行动。
@@ -95,7 +98,7 @@ export const createOrchestrator = (tools: DynamicStructuredTool[]) => {
 ## 💡 辅助内存快照：
 下方 '<memory>' 标签中的内容，是工具调用后更新的结构化数据快照。**这是你判断信息是否完整的唯一依据。**
 <memory>
-\${memory_content}
+{memory_content}
 </memory>
 ---
 ## ⚠️ 严格规则：
@@ -106,111 +109,134 @@ export const createOrchestrator = (tools: DynamicStructuredTool[]) => {
 	3. 在调用完成后，直接返回工具的输出结果
 *   如果信息不完整:
     1. 向用户提出明确的问题来收集缺失信息
-    2. 保持提问简洁，一次只问一个问题
 *   **绝对禁止**:
     1. 在工具调用后添加任何确认或总结信息
     2. 在对话中直接输出JSON格式的任务指令
     3. 进行任何形式的寒暄或闲聊
 `;
 
-	// The agent executor is a self-contained runnable that handles the ReAct loop.
-	const agentExecutor = createReactAgent({
-		llm: model,
-		tools,
-		prompt: TRAVEL_AGENT_PROMPT, // Pass the prompt template directly
-	});
+	// Create a tool map for quick lookup
+	const toolMap = new Map(tools.map((tool) => [tool.name, tool]));
 
-	return agentExecutor;
+	return async (state: AgentState): Promise<Partial<AgentState>> => {
+		console.log("---ORCHESTRATOR---");
+		let { messages, memory } = state;
 
-	// return async (state: AgentState): Promise<Partial<AgentState>> => {
-	// 	console.log("---ORCHESTRATOR---");
-	// 	let { messages, memory } = state;
+		// Update memory from the last tool call if it exists
+		const lastMessage = messages[messages.length - 1];
+		if (lastMessage instanceof ToolMessage) {
+			console.log(
+				"Orchestrator is updating memory from tool call result:",
+				lastMessage.content
+			);
+			try {
+				const toolOutput = JSON.parse(lastMessage.content as string);
+				memory = { ...memory, ...toolOutput };
+			} catch (e) {
+				console.warn(
+					"Tool output was not valid JSON, skipping memory update.",
+					e
+				);
+			}
+		}
 
-	// 	// **Core Logic**: Update memory from the last tool call if it exists.
-	// 	const lastMessage = messages[messages.length - 1];
-	// 	if (lastMessage instanceof ToolMessage) {
-	// 		console.log(
-	// 			"Orchestrator is updating memory from tool call result with tool output.",
-	// 			lastMessage.content
-	// 		);
-	// 		// This is a simplified merge. A real implementation might need more sophisticated logic.
-	// 		try {
-	// 			const toolOutput = JSON.parse(lastMessage.content as string);
-	// 			// Update memory with the new information from the tool.
-	// 			memory = { ...memory, ...toolOutput };
-	// 		} catch (e) {
-	// 			console.warn(
-	// 				"Tool output was not valid JSON, skipping memory update.",
-	// 				e
-	// 			);
-	// 		}
-	// 	}
+		// Create system message with current memory
+		const memoryContent = JSON.stringify(memory, null, 2);
+		const systemMessage = new SystemMessage({
+			content: systemPrompt.replace("{memory_content}", memoryContent),
+		});
 
-	// 	// Directly construct the system message with the updated memory.
-	// 	const memoryContent = JSON.stringify(memory, null, 2);
-	// 	const finalSystemMessage = new SystemMessage({
-	// 		content: systemPrompt.replace("{memory_content}", memoryContent),
-	// 	});
+		// Invoke the model with system message and conversation history
+		const result = await model.invoke([systemMessage, ...messages]);
+		const aiMessage = result as AIMessage;
 
-	// 	// Invoke the agent with the final system message and the rest of the history.
-	// 	const result = await agentExecutor.invoke({
-	// 		messages: [finalSystemMessage, ...messages],
-	// 	});
+		console.log("Orchestrator AI response:", aiMessage.content);
 
-	// 	// The result will be a list of messages that need to be added to the state.
-	// 	const aiMessage = result.messages[
-	// 		result.messages.length - 1
-	// 	] as AIMessage;
+		// Handle tool calls if present
+		if (aiMessage.tool_calls && aiMessage.tool_calls.length > 0) {
+			const toolCall = aiMessage.tool_calls[0];
+			const tool = toolMap.get(toolCall.name);
 
-	// 	console.log("get ai response in orchestrator:", aiMessage.content);
+			if (!tool) {
+				console.error(`Tool ${toolCall.name} not found`);
+				return {
+					messages: [aiMessage],
+					memory,
+					errorMessage: `Tool ${toolCall.name} not found`,
+				};
+			}
 
-	// 	// Check if the model decided to create the subtask.
-	// 	const subtaskToolCall = aiMessage.tool_calls?.find(
-	// 		(toolCall) => toolCall.name === "create_subtask"
-	// 	);
+			try {
+				console.log(
+					`Orchestrator calling tool: ${toolCall.name}`,
+					toolCall.args
+				);
+				const toolResult = await tool.func(toolCall.args);
 
-	// 	if (subtaskToolCall) {
-	// 		console.log(
-	// 			"Orchestrator collected all information and is creating a subtask."
-	// 		);
-	// 		const subtask = subtaskToolCall.args.subtask;
-	// 		// We must provide a tool message response to the tool call.
-	// 		// This is a "fake" response that indicates the subtask was created.
-	// 		// The key is to include a ToolMessage with the same tool_call_id
-	// 		// as the one in the AIMessage. This makes the history valid.
-	// 		const toolMessage = new ToolMessage({
-	// 			tool_call_id: subtaskToolCall.id ?? "",
-	// 			content: "Subtask created and ready for routing.",
-	// 		});
-	// 		return {
-	// 			messages: [aiMessage, toolMessage],
-	// 			subtask: subtask,
-	// 			memory: memory, // <-- **FIX**: Return the updated memory
-	// 			next: "router",
-	// 		};
-	// 	}
+				const toolMessage = new ToolMessage({
+					tool_call_id: toolCall.id ?? "",
+					content: toolResult,
+				});
 
-	// 	// Check for other tool calls to populate the memory.
-	// 	if (aiMessage.tool_calls && aiMessage.tool_calls.length > 0) {
-	// 		console.log(
-	// 			"Orchestrator decided to call a tool to populate memory."
-	// 		);
-	// 		// The graph will call the tools and the result will be in the next state.
-	// 		return {
-	// 			messages: [aiMessage],
-	// 			memory: memory, // <-- **FIX**: Return the updated memory
-	// 			next: "tools",
-	// 		};
-	// 	}
+				// Handle different tool types
+				if (toolCall.name === "generate_task_prompt") {
+					console.log(
+						"Orchestrator generated task prompt, moving to subtask creation"
+					);
+					return {
+						messages: [aiMessage, toolMessage],
+						memory,
+						next: "subtask_parser",
+					};
+				} else if (toolCall.name === "create_subtask") {
+					console.log(
+						"Orchestrator created subtask, ready for routing"
+					);
+					const subtaskData = JSON.parse(toolResult);
+					return {
+						messages: [aiMessage, toolMessage],
+						subtask: [subtaskData],
+						memory: { ...memory, ...subtaskData },
+						next: "router",
+					};
+				} else {
+					// For other tools (like time tools), continue the conversation
+					console.log(
+						"Orchestrator called utility tool, continuing conversation"
+					);
+					return {
+						messages: [aiMessage, toolMessage],
+						memory,
+						next: "orchestrator",
+					};
+				}
+			} catch (error: any) {
+				console.error(`Error calling tool ${toolCall.name}:`, error);
+				const errorMessage = new ToolMessage({
+					tool_call_id: toolCall.id ?? "",
+					content: `Error: ${error.message}`,
+				});
+				return {
+					messages: [aiMessage, errorMessage],
+					memory,
+					errorMessage: error.message,
+				};
+			}
+		}
 
-	// 	// Otherwise, it's a question for the user.
-	// 	console.log("Orchestrator is asking the user a question.");
-	// 	return {
-	// 		messages: [aiMessage],
-	// 		memory: memory, // <-- **FIX**: Return the updated memory
-	// 		next: "ask_user",
-	// 	};
-	// };
+		// No tool calls - asking user for information
+		console.log("Orchestrator is asking user for information");
+
+		const responseText = aiMessage.content.toString();
+
+		return {
+			messages: [aiMessage],
+			memory,
+			next: "ask_user",
+			// 只传递问题给子图
+			// questionFromOrchestrator: responseText,
+		};
+	};
 };
 
 export const createSubtaskTool = new DynamicStructuredTool({

@@ -1,7 +1,7 @@
 import * as dotenv from "dotenv";
 dotenv.config({ override: true });
 import { HumanMessage } from "@langchain/core/messages";
-import { initializeGraph } from "@/graph";
+import { initializeGraph } from "@/graph/graph";
 import readline from "readline";
 import { getMcpClientManager, initFromConfig } from "@/mcp/mcp-client";
 
