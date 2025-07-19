@@ -1,17 +1,24 @@
 import { Gemini } from "@/models/gemini";
 import { AgentState, TripPlanSchema } from "@/types/type";
-import { TripPlan } from "@/types/type";
+import { TripPlan, mergeTripPlan } from "@/tools/trip-plan";
 import { AIMessage, SystemMessage } from "@langchain/core/messages";
 
 export async function extractAndUpdateTravelPlan(
 	state: AgentState
 ): Promise<Partial<AgentState>> {
 	console.log("---正在提取旅行计划信息 (TypeScript)---");
-	const userMessage = state.messages[state.messages.length - 1];
+
+	// 修复：正确获取最后一条用户消息
+	const humanMessages = state.messages.filter(
+		(msg) => msg.getType() === "human"
+	);
+	const userMessage = humanMessages[humanMessages.length - 1];
+
+	// 简化：直接使用 state.tripPlan 或空对象
 	const currentTravelPlan: TripPlan = state.tripPlan || {};
 
 	const gemini = new Gemini();
-	const llm = gemini.llm("gemini-2.5-flash");
+	const llm = gemini.llm("gemini-2.5-flash-lite-preview-06-17");
 	const structuredLlm = llm.withStructuredOutput(TripPlanSchema);
 
 	const extractionPrompt = `你是一个善于从用户输入中提取旅行计划细节的助手。
@@ -28,26 +35,15 @@ export async function extractAndUpdateTravelPlan(
 			userMessage,
 		]);
 
-		const updatedTravelPlan: TripPlan = { ...currentTravelPlan };
-
-		Object.entries(extractedInfo).forEach(([key, value]) => {
-			// 只有当新值不是 undefined 且不是 null 时才进行更新
-			if (value !== undefined && value !== null) {
-				(updatedTravelPlan as any)[key] = value;
-			}
-		});
-
-		//check if all field in updatedTravelPlan are filled
-		const allFieldsFilled = Object.values(updatedTravelPlan).every(
-			(value) => value !== undefined && value !== null
+		// 使用工具函数合并 TripPlan
+		const updatedTravelPlan = mergeTripPlan(
+			currentTravelPlan,
+			extractedInfo
 		);
+
 		console.log("提取并更新后的旅行计划:", updatedTravelPlan);
 		return {
 			tripPlan: updatedTravelPlan,
-			userInteractionState: {
-				messages: [],
-				interactionOutcome: allFieldsFilled ? "success" : "reprompt",
-			},
 		};
 	} catch (e) {
 		console.error("信息提取或更新失败:", e);

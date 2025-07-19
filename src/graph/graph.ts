@@ -16,6 +16,15 @@ import { graphState } from "@/types/state";
 import { validateMessageSequence } from "@/types/state";
 import { createUserInteractionSubgraph } from "@/subgraph/user-interaction/graph";
 
+const startRouter = (state: AgentState): "orchestrator" | "ask_user" => {
+	// 如果用户交互未完成，则询问用户
+	if (!state.user_interaction_complete) {
+		console.log("User interaction not complete, asking user for input.");
+		return "ask_user";
+	} else {
+		return "orchestrator";
+	}
+};
 /**
  * Router for the Orchestrator.
  * Decides whether to call tools, wait for user input, or route to the specialist flow.
@@ -24,6 +33,7 @@ const orchestratorRouter = (
 	state: AgentState
 ): "subtask_parser" | "ask_user" | "orchestrator" => {
 	// Handle error cases
+	// todo)) finish later
 	if (state.errorMessage) {
 		console.log("Orchestrator encountered error, asking user");
 		return "ask_user";
@@ -36,11 +46,14 @@ const orchestratorRouter = (
 	} else if (state.next === "ask_user") {
 		console.log("Orchestrator is asking user for information");
 		return "ask_user";
+	} else if (state.next === "orchestrator") {
+		console.log("Orchestrator continuing conversation");
+		return "orchestrator";
 	}
 
 	// Default fallback
-	console.log("Orchestrator default: asking user for information");
-	return "ask_user";
+	console.log("Orchestrator default: continuing conversation");
+	return "orchestrator";
 };
 
 const subtaskRouter = (
@@ -132,6 +145,10 @@ export const initializeGraph = async () => {
 
 		// === Edges ===
 		.addEdge(START, "orchestrator")
+		.addConditionalEdges(START, startRouter, {
+			orchestrator: "orchestrator",
+			ask_user: "ask_user",
+		})
 
 		// --- Phase 1: Orchestrator Loop ---
 		.addConditionalEdges("orchestrator", orchestratorRouter, {

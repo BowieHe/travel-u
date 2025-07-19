@@ -1,24 +1,27 @@
-import { TripPlan } from "@/types/type";
+import {
+	TripPlan,
+	isTripPlanComplete,
+	convertTripPlanToMemory,
+} from "@/tools/trip-plan";
 import { StateGraph, START, END, interrupt } from "@langchain/langgraph";
 import { graphState } from "@/types/state";
 import { AgentState } from "@/types/type";
 import { extractAndUpdateTravelPlan } from "@/nodes/user-interact/extract";
 import { AIMessage } from "@langchain/core/messages";
 
-// 检查旅行计划是否完整的函数
-function checkTripPlanComplete(tripPlan: TripPlan): boolean {
-	// 检查必需字段是否都已填写
-	const requiredFields = ["destination", "departure", "startDate"];
-	return requiredFields.every(
-		(field) =>
-			tripPlan[field as keyof TripPlan] &&
-			tripPlan[field as keyof TripPlan] !== null &&
-			tripPlan[field as keyof TripPlan] !== undefined
-	);
-}
-
+const startRouter = (state: AgentState): "process_response" | "ask_user" => {
+	if (state.messages[state.messages.length - 1].getType() === "ai") {
+		console.log("User interaction not complete, asking user for input.");
+		return "ask_user";
+	} else {
+		return "process_response";
+	}
+};
 // 生成询问用户的消息
-function generateQuestionForUser(tripPlan: TripPlan): string {
+function generateQuestionForUser(tripPlan: TripPlan | undefined): string {
+	if (!tripPlan) {
+		return "请提供您的旅行计划信息。";
+	}
 	if (!tripPlan.destination) {
 		return "请告诉我您的目的地是哪里？";
 	}
@@ -39,14 +42,20 @@ function generateQuestionForUser(tripPlan: TripPlan): string {
 
 // 询问用户节点
 const askUserNode = async (state: AgentState): Promise<Partial<AgentState>> => {
-	console.log("--- 询问用户节点 ---");
-	const currentTripPlan = state.tripPlan || {};
+	console.log("--- ask user ---");
+	const currentTripPlan = state.tripPlan;
+
+	// last message is already the question, skip
+	if (state.messages[state.messages.length - 1].getType() === "ai") {
+		console.log(
+			"--- last message is already a question, skipping ask user node ---"
+		);
+		return {};
+	}
 	const question = generateQuestionForUser(currentTripPlan);
 
-	const aiMessage = new AIMessage({ content: question });
-
 	return {
-		messages: [...state.messages, aiMessage],
+		messages: [new AIMessage({ content: question })],
 	};
 };
 
@@ -67,8 +76,12 @@ const processUserResponseNode = async (
 	const result = await extractAndUpdateTravelPlan(state);
 
 	// 检查是否获得了所有必需信息
-	const updatedTripPlan = result.tripPlan || state.tripPlan || {};
-	const isComplete = checkTripPlanComplete(updatedTripPlan);
+	const updatedTripPlan = result.tripPlan;
+
+	// 使用工具函数检查完整性
+	const isComplete = updatedTripPlan
+		? isTripPlanComplete(updatedTripPlan)
+		: false;
 
 	return {
 		...result,
@@ -77,14 +90,35 @@ const processUserResponseNode = async (
 };
 
 // 路由器：决定是继续询问还是结束
-const userInteractionRouter = (state: AgentState): "ask_user" | "END" => {
+const userInteractionRouter = (
+	state: AgentState
+): "ask_user" | "complete_interaction" => {
 	if (state.user_interaction_complete) {
 		console.log("用户交互完成，所有必需信息已收集");
-		return "END";
+		return "complete_interaction";
 	} else {
 		console.log("信息不完整，继续询问用户");
 		return "ask_user";
 	}
+};
+
+// 新增：将 tripPlan 信息转换为 memory 格式的函数
+// 移除本地定义，使用从 @/tools/trip-plan 导入的函数
+
+// 完成节点：将收集到的信息传回主图
+const completeInteractionNode = async (
+	state: AgentState
+): Promise<Partial<AgentState>> => {
+	console.log("--- 完成用户交互 ---");
+	const tripPlan = state.tripPlan || {};
+	const memory = convertTripPlanToMemory(tripPlan);
+
+	console.log("子图收集到的信息，转换为 memory:", memory);
+
+	return {
+		memory: { ...state.memory, ...memory },
+		user_interaction_complete: true,
+	};
 };
 
 export function createUserInteractionSubgraph() {
@@ -94,17 +128,23 @@ export function createUserInteractionSubgraph() {
 		.addNode("ask_user", askUserNode)
 		.addNode("wait_for_user", waitForUserNode)
 		.addNode("process_response", processUserResponseNode)
+		.addNode("complete_interaction", completeInteractionNode)
 
-		// 设置边
-		.addEdge(START, "ask_user")
+		.addConditionalEdges(START, startRouter, {
+			process_response: "process_response",
+			ask_user: "ask_user",
+		})
 		.addEdge("ask_user", "wait_for_user")
 		.addEdge("wait_for_user", "process_response")
 
-		// 条件边：根据信息完整性决定是继续询问还是结束
+		// 条件边：根据信息完整性决定是继续询问还是完成交互
 		.addConditionalEdges("process_response", userInteractionRouter, {
 			ask_user: "ask_user",
-			END: END,
-		});
+			complete_interaction: "complete_interaction",
+		})
+
+		// 完成交互后结束子图
+		.addEdge("complete_interaction", END);
 
 	return subgraph.compile();
 }

@@ -1,6 +1,10 @@
 import { BaseMessage } from "@langchain/core/messages";
 import { AnyExpertTask, TaskType } from "../utils/task-type";
-import { z } from "zod";
+import {
+	TripPlan,
+	TransportationType,
+	getTripPlanSchema,
+} from "@/tools/trip-plan";
 
 /**
  * Represents the state of our LangGraph.
@@ -43,18 +47,6 @@ export interface AgentState {
 	user_interaction_complete?: boolean;
 }
 
-export const TransportationEnum = z.enum(["flight", "train", "car"]);
-export type TransportationType = z.infer<typeof TransportationEnum>;
-
-export interface TripPlan {
-	destination?: string;
-	departure?: string;
-	startDate?: string;
-	endDate?: string;
-	transportation?: TransportationType;
-	budget?: number;
-}
-
 export interface UserInteractionState {
 	messages: Array<BaseMessage>;
 	// 从主图传入的问题信息
@@ -67,28 +59,8 @@ export interface UserInteractionState {
 	extractedInfo?: Record<string, string>;
 }
 
-export const TripPlanSchema = z.object({
-	destination: z.string().optional().describe("用户希望前往的目的地。"),
-	departure: z.string().optional().describe("用户的出发城市或地点。"),
-	startDate: z
-		.string()
-		.optional()
-		.describe(
-			"旅行的开始日期，可以是自然语言描述（如 '下个月', '七月十五号'）。"
-		),
-	endDate: z
-		.string()
-		.optional()
-		.describe("旅行的结束日期或持续时间（如 '一周', '七月二十二号'）。"),
-	budget: z.number().optional().describe("旅行的大致预算，请尝试提取数字。"),
-	transportation: TransportationEnum.optional().describe(
-		"用户偏好的交通方式（如 '飞机', '火车', '汽车'）。"
-	),
-	// numTravelers: z.number().int().optional().describe("旅行的人数。"),
-	// interests: z
-	// 	.array(z.string())
-	// 	.optional()
-	// 	.describe(
-	// 		"用户在旅行中的兴趣点或偏好（如 '徒步', '博物馆', '美食'）。"
-	// 	),
-});
+// 导出 TripPlanSchema，从工具函数获取
+export const TripPlanSchema = getTripPlanSchema();
+
+// 重新导出类型，保持向后兼容
+export { TripPlan, TransportationType };

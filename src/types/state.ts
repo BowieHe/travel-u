@@ -1,28 +1,30 @@
 import { StateGraphArgs } from "@langchain/langgraph";
 import { AgentState, UserInteractionState } from "./type";
 import { BaseMessage, AIMessage, ToolMessage } from "@langchain/core/messages";
+import { TripPlan } from "@/tools/trip-plan";
 
 export const graphState: StateGraphArgs<AgentState>["channels"] = {
 	messages: {
 		value: (x: BaseMessage[], y: BaseMessage[]) => {
-			// 更安全的消息合并逻辑
-			if (!x || x.length === 0) return y;
-			if (!y || y.length === 0) return x;
+			// // 更安全的消息合并逻辑
+			// if (!x || x.length === 0) return y;
+			// if (!y || y.length === 0) return x;
 
-			// 首先处理ReAct节点的消息
-			const processedMessages = processReActMessages(x, y);
+			// // 首先处理ReAct节点的消息
+			// const processedMessages = processReActMessages(x, y);
 
-			// 然后去重
-			const deduplicated = deduplicateMessages(processedMessages);
+			// // 然后去重
+			// const deduplicated = deduplicateMessages(processedMessages);
 
-			// 最后验证消息序列
-			const validatedMessages = validateMessageSequence(deduplicated);
+			// // 最后验证消息序列
+			// const validatedMessages = validateMessageSequence(deduplicated);
 
-			console.log(
-				`Message processing: ${x.length} + ${y.length} -> ${processedMessages.length} -> ${deduplicated.length} -> ${validatedMessages.length}`
-			);
+			// console.log(
+			// 	`Message processing: ${x.length} + ${y.length} -> ${processedMessages.length} -> ${deduplicated.length} -> ${validatedMessages.length}`
+			// );
 
-			return validatedMessages;
+			// return validatedMessages;
+			return [...x, ...y];
 		},
 		default: () => [],
 	},
@@ -56,12 +58,12 @@ export const graphState: StateGraphArgs<AgentState>["channels"] = {
 		default: () => undefined,
 	},
 	tripPlan: {
-		value: (x, y) => ({ ...x, ...y }),
+		value: (x, y) => y,
 		default: () => ({}),
 	},
 	user_interaction_complete: {
 		value: (_x, y) => y,
-		default: () => false,
+		default: () => true,
 	},
 };
 

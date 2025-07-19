@@ -34,8 +34,8 @@ export const createOrchestrator = (tools: DynamicStructuredTool[]) => {
 3.  **行动**:
     *   如果对话中出现了模糊的时间信息（如"明天"、"后天"、"下周"等），**必须**先调用 'time_' 工具获取当前系统时间。
     *   获取当前系统时间后，结合用户的相对时间描述（如"后天"），**推算出具体的日期**，并将结果更新到 memory 的 'departure_date' 字段。
-    *   如果发现仍有缺失的关键信息（出发地、目的地、出发日期），**必须**向用户提出具体问题来补全它。
-    *   **当且仅当**所有必需信息（出发地、目的地、出发日期）都已在 **<memory> 快照** 中清晰存在时，**必须**调用 \`generate_task_prompt\` 工具生成结构化任务指令。
+    *   如果发现仍有缺失的关键信息（出发地、目的地、出发日期、预算、交通工具、返程时间），**必须**向用户提出具体问题来补全它。
+    *   **当且仅当**所有必需信息（出发地、目的地、出发日期、预算、交通工具、返程时间）都已在 **<memory> 快照** 中清晰存在时，**必须**调用 \`generate_task_prompt\` 工具生成结构化任务指令。
 
 ---
 ## ✅ 当 memory 信息完整时，调用 generate_task_prompt 工具的规则：
@@ -120,6 +120,14 @@ export const createOrchestrator = (tools: DynamicStructuredTool[]) => {
 
 	return async (state: AgentState): Promise<Partial<AgentState>> => {
 		console.log("---ORCHESTRATOR---");
+		if (!state.user_interaction_complete) {
+			console.log(
+				"User interaction not complete, waiting for user input."
+			);
+			return {
+				next: "ask_user",
+			};
+		}
 		let { messages, memory } = state;
 
 		// Update memory from the last tool call if it exists
@@ -137,6 +145,30 @@ export const createOrchestrator = (tools: DynamicStructuredTool[]) => {
 					"Tool output was not valid JSON, skipping memory update.",
 					e
 				);
+			}
+		}
+
+		// 检查是否从子图返回，如果是，先检查信息完整性
+		if (state.user_interaction_complete) {
+			console.log("用户交互子图已完成，检查信息完整性...");
+			console.log("当前 memory:", memory);
+
+			// 检查必需信息是否完整
+			const hasOrigin = memory.origin && memory.origin.trim().length > 0;
+			const hasDestination =
+				memory.destination && memory.destination.trim().length > 0;
+			const hasDepartureDate =
+				memory.departure_date &&
+				memory.departure_date.trim().length > 0;
+
+			if (hasOrigin && hasDestination && hasDepartureDate) {
+				console.log("所有必需信息已收集完毕，准备生成任务");
+				// 重置用户交互完成标志
+				return {
+					memory,
+					user_interaction_complete: false,
+					next: "orchestrator", // 继续在 orchestrator 中处理
+				};
 			}
 		}
 
@@ -224,17 +256,14 @@ export const createOrchestrator = (tools: DynamicStructuredTool[]) => {
 			}
 		}
 
-		// No tool calls - asking user for information
-		console.log("Orchestrator is asking user for information");
-
 		const responseText = aiMessage.content.toString();
 
 		return {
 			messages: [aiMessage],
 			memory,
 			next: "ask_user",
-			// 只传递问题给子图
-			// questionFromOrchestrator: responseText,
+			// 重置用户交互完成标志，准备新的交互
+			user_interaction_complete: false,
 		};
 	};
 };
