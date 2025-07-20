@@ -80,8 +80,9 @@ const askUserNode = async (state: AgentState): Promise<Partial<AgentState>> => {
     const question = generateQuestionForUser(currentTripPlan);
     console.log("生成问题:", question);
 
+    // 关键修复：将AI的问题添加到现有messages中，而不是替换
     return {
-        messages: [new AIMessage({ content: question })],
+        messages: [...state.messages, new AIMessage({ content: question })],
     };
 };
 
