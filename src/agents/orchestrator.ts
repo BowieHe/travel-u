@@ -3,9 +3,9 @@ import { Gemini } from "@/models/gemini";
 import { z } from "zod";
 import { AgentState } from "@/types/type";
 import {
-	AIMessage,
-	SystemMessage,
-	ToolMessage,
+    AIMessage,
+    SystemMessage,
+    ToolMessage,
 } from "@langchain/core/messages";
 
 /**
@@ -16,26 +16,30 @@ import {
  * @returns A node function that can be used in the graph.
  */
 export const createOrchestrator = (tools: DynamicStructuredTool[]) => {
-	const llm = new Gemini();
-	const model = llm.llm("gemini-2.5-flash");
+    const llm = new Gemini();
+    const model = llm.llm("gemini-2.5-flash").bindTools(tools);
 
-	const systemPrompt = `
+    const systemPrompt = `
 你是一个旅游智能调度器 Agent，运行于一个多 Agent 编排系统中。你的职责是：
-→ **逐步引导用户完成关键信息填充**
-→ **推断本次任务的主题与目标**
+→ **分析用户需求和当前信息完整性**
+→ **调度相应的工具来收集信息或执行任务**
 → **在所有信息集齐后，调用generate_task_prompt工具生成结构化任务指令**
 
 ---
 ## 🗂 核心工作流：
-你的主要任务是**回顾整个对话历史**和**当前的memory快照**，逐步构建一个包含所有必需信息的旅行计划。
+你的主要任务是**分析当前的memory快照**，判断信息完整性，并调度相应的工具。
 
-1.  **回顾历史与记忆**: 在每次回应前，务必**重新阅读完整的对话记录**和下方 **<memory> 快照**，确保你没有遗漏任何关键信息。
-2.  **思考**: 根据现有信息，判断下一步行动。
-3.  **行动**:
-    *   如果对话中出现了模糊的时间信息（如"明天"、"后天"、"下周"等），**必须**先调用 'time_' 工具获取当前系统时间。
-    *   获取当前系统时间后，结合用户的相对时间描述（如"后天"），**推算出具体的日期**，并将结果更新到 memory 的 'departure_date' 字段。
-    *   如果发现仍有缺失的关键信息（出发地、目的地、出发日期、预算、交通工具、返程时间），**必须**向用户提出具体问题来补全它。
-    *   **当且仅当**所有必需信息（出发地、目的地、出发日期、预算、交通工具、返程时间）都已在 **<memory> 快照** 中清晰存在时，**必须**调用 \`generate_task_prompt\` 工具生成结构化任务指令。
+1.  **分析当前状态**: 检查下方 **<memory> 快照** 中的信息完整性
+2.  **必须调用工具**:
+    *   如果对话中出现了模糊的时间信息（如"明天"、"后天"、"下周"等），**必须**先调用 time 工具获取当前系统时间。
+    *   如果发现缺失关键信息（出发地、目的地、出发日期等），**必须**调用 \`collect_user_info\` 工具：
+        \`\`\`json
+        {
+          "reason": "缺少出发地和出发日期信息",
+          "missing_fields": ["origin", "departure_date"]
+        }
+        \`\`\`
+    *   **当且仅当**所有必需信息（出发地、目的地、出发日期）都已在 **<memory> 快照** 中清晰存在时，**必须**调用 \`generate_task_prompt\` 工具生成结构化任务指令。
 
 ---
 ## ✅ 当 memory 信息完整时，调用 generate_task_prompt 工具的规则：
@@ -102,229 +106,279 @@ export const createOrchestrator = (tools: DynamicStructuredTool[]) => {
 </memory>
 ---
 ## ⚠️ 严格规则：
-*   你的任务是调用工具或向用户提问，而不是闲聊。
+*   你**必须**调用工具，绝对不能直接回复文本。
 *   当 memory 信息完整时:
     1. **必须** 立即调用 \`generate_task_prompt\` 工具
-    2. **不要** 在工具调用前后添加任何解释或确认信息
-	3. 在调用完成后，直接返回工具的输出结果
 *   如果信息不完整:
-    1. 向用户提出明确的问题来收集缺失信息
+    1. **必须** 调用 \`collect_user_info\` 工具，并说明缺失的字段
+*   如果有模糊的时间信息:
+    1. **必须** 先调用相应的时间工具
 *   **绝对禁止**:
-    1. 在工具调用后添加任何确认或总结信息
-    2. 在对话中直接输出JSON格式的任务指令
+    1. 直接回复任何文本消息
+    2. 不调用工具就结束回合
     3. 进行任何形式的寒暄或闲聊
+
+**重要：你的每次回应都必须包含工具调用，不允许有任何例外。**
 `;
 
-	// Create a tool map for quick lookup
-	const toolMap = new Map(tools.map((tool) => [tool.name, tool]));
+    // Create a tool map for quick lookup
+    const toolMap = new Map(tools.map((tool) => [tool.name, tool]));
 
-	return async (state: AgentState): Promise<Partial<AgentState>> => {
-		console.log("---ORCHESTRATOR---");
-		if (!state.user_interaction_complete) {
-			console.log(
-				"User interaction not complete, waiting for user input."
-			);
-			return {
-				next: "ask_user",
-			};
-		}
-		let { messages, memory } = state;
+    return async (state: AgentState): Promise<Partial<AgentState>> => {
+        console.log("---ORCHESTRATOR---");
 
-		// Update memory from the last tool call if it exists
-		const lastMessage = messages[messages.length - 1];
-		if (lastMessage instanceof ToolMessage) {
-			console.log(
-				"Orchestrator is updating memory from tool call result:",
-				lastMessage.content
-			);
-			try {
-				const toolOutput = JSON.parse(lastMessage.content as string);
-				memory = { ...memory, ...toolOutput };
-			} catch (e) {
-				console.warn(
-					"Tool output was not valid JSON, skipping memory update.",
-					e
-				);
-			}
-		}
+        let { messages, memory } = state;
 
-		// 检查是否从子图返回，如果是，先检查信息完整性
-		if (state.user_interaction_complete) {
-			console.log("用户交互子图已完成，检查信息完整性...");
-			console.log("当前 memory:", memory);
+        // Update memory from the last tool call if it exists
+        const lastMessage = messages[messages.length - 1];
+        if (lastMessage instanceof ToolMessage) {
+            console.log(
+                "Orchestrator is updating memory from tool call result:",
+                lastMessage.content
+            );
+            try {
+                const toolOutput = JSON.parse(lastMessage.content as string);
+                memory = { ...memory, ...toolOutput };
+            } catch (e) {
+                console.warn(
+                    "Tool output was not valid JSON, skipping memory update.",
+                    e
+                );
+            }
+        }
 
-			// 检查必需信息是否完整
-			const hasOrigin = memory.origin && memory.origin.trim().length > 0;
-			const hasDestination =
-				memory.destination && memory.destination.trim().length > 0;
-			const hasDepartureDate =
-				memory.departure_date &&
-				memory.departure_date.trim().length > 0;
+        // 检查必需信息是否完整
+        const hasOrigin = memory.origin && memory.origin.trim().length > 0;
+        const hasDestination =
+            memory.destination && memory.destination.trim().length > 0;
+        const hasDepartureDate =
+            memory.departure_date && memory.departure_date.trim().length > 0;
 
-			if (hasOrigin && hasDestination && hasDepartureDate) {
-				console.log("所有必需信息已收集完毕，准备生成任务");
-				// 重置用户交互完成标志
-				return {
-					memory,
-					user_interaction_complete: false,
-					next: "orchestrator", // 继续在 orchestrator 中处理
-				};
-			}
-		}
+        console.log("信息完整性检查:", {
+            hasOrigin,
+            hasDestination,
+            hasDepartureDate,
+            memory,
+        });
 
-		// Create system message with current memory
-		const memoryContent = JSON.stringify(memory, null, 2);
-		const systemMessage = new SystemMessage({
-			content: systemPrompt.replace("{memory_content}", memoryContent),
-		});
+        // If information is missing, the AI should call collect_user_info tool
+        if (!hasOrigin || !hasDestination || !hasDepartureDate) {
+            console.log("信息不完整，AI应该调用 collect_user_info 工具");
+        } else {
+            console.log("信息完整，AI应该调用 generate_task_prompt 工具");
+        }
 
-		// Invoke the model with system message and conversation history
-		const result = await model.invoke([systemMessage, ...messages]);
-		const aiMessage = result as AIMessage;
+        // Create system message with current memory
+        const memoryContent = JSON.stringify(memory, null, 2);
+        const systemMessage = new SystemMessage({
+            content: systemPrompt.replace("{memory_content}", memoryContent),
+        });
 
-		console.log("Orchestrator AI response:", aiMessage.content);
+        // Invoke the model with system message and conversation history
+        const result = await model.invoke([systemMessage, ...messages]);
+        const aiMessage = result as AIMessage;
 
-		// Handle tool calls if present
-		if (aiMessage.tool_calls && aiMessage.tool_calls.length > 0) {
-			const toolCall = aiMessage.tool_calls[0];
-			const tool = toolMap.get(toolCall.name);
+        console.log("Orchestrator AI response:", aiMessage.content);
 
-			if (!tool) {
-				console.error(`Tool ${toolCall.name} not found`);
-				return {
-					messages: [aiMessage],
-					memory,
-					errorMessage: `Tool ${toolCall.name} not found`,
-				};
-			}
+        // Handle tool calls if present
+        if (aiMessage.tool_calls && aiMessage.tool_calls.length > 0) {
+            const toolCall = aiMessage.tool_calls[0];
+            const tool = toolMap.get(toolCall.name);
 
-			try {
-				console.log(
-					`Orchestrator calling tool: ${toolCall.name}`,
-					toolCall.args
-				);
-				const toolResult = await tool.func(toolCall.args);
+            if (!tool) {
+                console.error(`Tool ${toolCall.name} not found`);
+                return {
+                    messages: [aiMessage],
+                    memory,
+                    errorMessage: `Tool ${toolCall.name} not found`,
+                };
+            }
 
-				const toolMessage = new ToolMessage({
-					tool_call_id: toolCall.id ?? "",
-					content: toolResult,
-				});
+            try {
+                console.log(
+                    `Orchestrator calling tool: ${toolCall.name}`,
+                    toolCall.args
+                );
 
-				// Handle different tool types
-				if (toolCall.name === "generate_task_prompt") {
-					console.log(
-						"Orchestrator generated task prompt, moving to subtask creation"
-					);
-					return {
-						messages: [aiMessage, toolMessage],
-						memory,
-						next: "subtask_parser",
-					};
-				} else if (toolCall.name === "create_subtask") {
-					console.log(
-						"Orchestrator created subtask, ready for routing"
-					);
-					const subtaskData = JSON.parse(toolResult);
-					return {
-						messages: [aiMessage, toolMessage],
-						subtask: [subtaskData],
-						memory: { ...memory, ...subtaskData },
-						next: "router",
-					};
-				} else {
-					// For other tools (like time tools), continue the conversation
-					console.log(
-						"Orchestrator called utility tool, continuing conversation"
-					);
-					return {
-						messages: [aiMessage, toolMessage],
-						memory,
-						next: "orchestrator",
-					};
-				}
-			} catch (error: any) {
-				console.error(`Error calling tool ${toolCall.name}:`, error);
-				const errorMessage = new ToolMessage({
-					tool_call_id: toolCall.id ?? "",
-					content: `Error: ${error.message}`,
-				});
-				return {
-					messages: [aiMessage, errorMessage],
-					memory,
-					errorMessage: error.message,
-				};
-			}
-		}
+                // For collect_user_info tool, pass the current state
+                let toolConfig = {};
+                if (toolCall.name === "collect_user_info") {
+                    toolConfig = {
+                        configurable: {
+                            currentState: { ...state, memory },
+                            thread_id: "user_interaction",
+                        },
+                    };
+                }
 
-		const responseText = aiMessage.content.toString();
+                const toolResult = await tool.func(
+                    toolCall.args,
+                    undefined,
+                    toolConfig
+                );
 
-		return {
-			messages: [aiMessage],
-			memory,
-			next: "ask_user",
-			// 重置用户交互完成标志，准备新的交互
-			user_interaction_complete: false,
-		};
-	};
+                const toolMessage = new ToolMessage({
+                    tool_call_id: toolCall.id ?? "",
+                    content: toolResult,
+                });
+
+                // Handle different tool types
+                if (toolCall.name === "generate_task_prompt") {
+                    console.log(
+                        "Orchestrator generated task prompt, moving to subtask creation"
+                    );
+                    return {
+                        messages: [aiMessage, toolMessage],
+                        memory,
+                        next: "subtask_parser",
+                    };
+                } else if (toolCall.name === "create_subtask") {
+                    console.log(
+                        "Orchestrator created subtask, ready for routing"
+                    );
+                    const subtaskData = JSON.parse(toolResult);
+                    return {
+                        messages: [aiMessage, toolMessage],
+                        subtask: [subtaskData],
+                        memory: { ...memory, ...subtaskData },
+                        next: "router",
+                    };
+                } else if (toolCall.name === "collect_user_info") {
+                    console.log("Orchestrator requesting user interaction");
+                    // Parse the result and set routing flag
+                    const userInteractionRequest = JSON.parse(toolResult);
+
+                    return {
+                        messages: [aiMessage, toolMessage],
+                        memory,
+                        user_interaction_complete: false,
+                        next: "ask_user",
+                    };
+                } else {
+                    // For other tools (like time tools), continue the conversation
+                    console.log(
+                        "Orchestrator called utility tool, continuing conversation"
+                    );
+                    return {
+                        messages: [aiMessage, toolMessage],
+                        memory,
+                        next: "orchestrator",
+                    };
+                }
+            } catch (error: any) {
+                console.error(`Error calling tool ${toolCall.name}:`, error);
+                const errorMessage = new ToolMessage({
+                    tool_call_id: toolCall.id ?? "",
+                    content: `Error: ${error.message}`,
+                });
+                return {
+                    messages: [aiMessage, errorMessage],
+                    memory,
+                    errorMessage: error.message,
+                };
+            }
+        }
+
+        // If AI responds without tool calls, force user interaction
+        console.log(
+            "WARNING: AI responded without tool calls, forcing user interaction"
+        );
+        console.log("AI response content:", aiMessage.content);
+
+        // Force user interaction by setting the appropriate state
+        return {
+            messages: [aiMessage],
+            memory,
+            user_interaction_complete: false,
+            next: "ask_user",
+        };
+    };
 };
 
 export const createSubtaskTool = new DynamicStructuredTool({
-	name: "create_subtask",
-	description:
-		"Creates a subtask with the collected information when all fields are present.",
-	schema: z.object({
-		topic: z
-			.string()
-			.describe(
-				"The topic of the request, inferred from the user's intent. Should be one of: 'transportation', 'destination'."
-			),
-		destination: z.string().describe("The final destination."),
-		departure_date: z
-			.string()
-			.describe("The machine-readable departure date."),
-		origin: z.string().describe("The starting point of the journey."),
-	}),
-	func: async (input) => {
-		// The tool's function is just to return the structured data.
-		return JSON.stringify(input);
-	},
+    name: "create_subtask",
+    description:
+        "Creates a subtask with the collected information when all fields are present.",
+    schema: z.object({
+        topic: z
+            .string()
+            .describe(
+                "The topic of the request, inferred from the user's intent. Should be one of: 'transportation', 'destination'."
+            ),
+        destination: z.string().describe("The final destination."),
+        departure_date: z
+            .string()
+            .describe("The machine-readable departure date."),
+        origin: z.string().describe("The starting point of the journey."),
+    }),
+    func: async (input) => {
+        // The tool's function is just to return the structured data.
+        return JSON.stringify(input);
+    },
 });
 
 // 2. Define the task generation tool with structured output
 export const generateTaskPromptTool = new DynamicStructuredTool({
-	name: "generate_task_prompt",
-	description:
-		"Generates a structured task prompt for the specialist agent when all required information is collected.",
-	schema: z.object({
-		task_prompt_for_expert_agent: z.object({
-			role_definition: z
-				.string()
-				.describe("The role definition for the specialist agent"),
-			core_goal: z
-				.string()
-				.describe("The core goal description for the task"),
-			input_data: z.object({
-				origin: z
-					.string()
-					.describe("The starting point of the journey"),
-				destination: z.string().describe("The final destination"),
-				date: z.string().describe("The departure date"),
-			}),
-			output_requirements: z.object({
-				format: z
-					.string()
-					.describe("The format instructions for the output"),
-				constraints: z
-					.array(z.string())
-					.describe("List of constraints for the output"),
-			}),
-			user_persona: z
-				.string()
-				.describe("Description of the user persona"),
-		}),
-	}),
-	func: async (input) => {
-		// Return the structured task prompt
-		return JSON.stringify(input);
-	},
+    name: "generate_task_prompt",
+    description:
+        "Generates a structured task prompt for the specialist agent when all required information is collected.",
+    schema: z.object({
+        task_prompt_for_expert_agent: z.object({
+            role_definition: z
+                .string()
+                .describe("The role definition for the specialist agent"),
+            core_goal: z
+                .string()
+                .describe("The core goal description for the task"),
+            input_data: z.object({
+                origin: z
+                    .string()
+                    .describe("The starting point of the journey"),
+                destination: z.string().describe("The final destination"),
+                date: z.string().describe("The departure date"),
+            }),
+            output_requirements: z.object({
+                format: z
+                    .string()
+                    .describe("The format instructions for the output"),
+                constraints: z
+                    .array(z.string())
+                    .describe("List of constraints for the output"),
+            }),
+            user_persona: z
+                .string()
+                .describe("Description of the user persona"),
+        }),
+    }),
+    func: async (input) => {
+        // Return the structured task prompt
+        return JSON.stringify(input);
+    },
+});
+
+// 3. Define the user interaction tool - simplified to return routing instruction
+export const collectUserInfoTool = new DynamicStructuredTool({
+    name: "collect_user_info",
+    description:
+        "Signals that user interaction is needed to collect missing travel information.",
+    schema: z.object({
+        reason: z
+            .string()
+            .describe(
+                "The reason for collecting user information (e.g., 'missing destination information')"
+            ),
+        missing_fields: z
+            .array(z.string())
+            .describe("List of missing fields that need to be collected"),
+    }),
+    func: async (input) => {
+        console.log("Orchestrator requesting user interaction:", input.reason);
+
+        return JSON.stringify({
+            action: "request_user_interaction",
+            reason: input.reason,
+            missing_fields: input.missing_fields,
+            message: `User interaction needed: ${input.reason}`,
+        });
+    },
 });
