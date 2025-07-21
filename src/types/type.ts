@@ -19,6 +19,8 @@ export type AgentNode =
 	| "router"
 	| "ask_user";
 
+export type UserNode = "ask_user" | "process_response" | "reletive_time";
+
 type Outcome = "success" | "reprompt" | "cancel";
 
 export type SpecialistNode =
@@ -28,7 +30,7 @@ export type SpecialistNode =
 
 export interface AgentState {
 	messages: Array<BaseMessage>;
-	next: AgentNode | "END" | TaskType;
+	next: AgentNode | "END" | TaskType | UserNode;
 
 	// todo)) might be same
 	memory: Record<string, any>;

@@ -4,6 +4,7 @@ import { HumanMessage } from "@langchain/core/messages";
 import { initializeGraph } from "@/graph/graph";
 import readline from "readline";
 import { getMcpClientManager, initFromConfig } from "@/mcp/mcp-client";
+import { Command } from "@langchain/langgraph";
 
 // Create a readline interface for user input
 const rl = readline.createInterface({
@@ -53,6 +54,9 @@ async function main() {
 	// The `thread` object allows us to persist state across calls.
 	const thread = { configurable: { thread_id: "conversation-1" } };
 
+	// 用于跟踪当前是否有待处理的中断
+	let pendingInterrupt = false;
+
 	// eslint-disable-next-line no-constant-condition
 	while (true) {
 		const userInput = await askQuestion("\nYou: ");
@@ -65,21 +69,46 @@ async function main() {
 
 		console.log("🚀 Running the graph...");
 
-		// By only passing the latest user input, we delegate conversation history
-		// management entirely to LangGraph's checkpoint system. This avoids
-		// the "double counting" of messages that caused duplication issues.
-		const result = await graph.invoke(
-			{ messages: [new HumanMessage(userInput)] },
-			thread
-		);
+		let result;
 
-		// The `result.messages` will contain the full, correct history,
-		// managed by the checkpoint. We can extract the last message to display.
-		const lastMessage = result.messages[result.messages.length - 1];
-		if (lastMessage && lastMessage.getType() === "ai") {
-			console.log("\n🤖 AI:", lastMessage.content);
+		if (pendingInterrupt) {
+			// 如果有待处理的中断，使用 Command({ resume: userInput }) 恢复执行
+			console.log("📤 恢复图的执行，传入用户输入...");
+			result = await graph.invoke(
+				new Command({ resume: userInput }),
+				thread
+			);
+			pendingInterrupt = false; // 重置中断标志
 		} else {
-			console.log("\n🏁 Graph execution finished or paused.");
+			// 正常启动图的执行
+			console.log("🆕 开始新的图执行...");
+			result = await graph.invoke(
+				{ messages: [new HumanMessage(userInput)] },
+				thread
+			);
+		}
+
+		// 检查是否有中断
+		if (result.__interrupt__) {
+			console.log("⏸️  图被中断，等待用户输入...");
+			console.log("中断信息:", result.__interrupt__);
+			pendingInterrupt = true; // 设置中断标志
+
+			// 显示AI的问题（如果有的话）
+			if (result.messages && result.messages.length > 0) {
+				const lastMessage = result.messages[result.messages.length - 1];
+				if (lastMessage && lastMessage.getType() === "ai") {
+					console.log("\n🤖 AI:", lastMessage.content);
+				}
+			}
+		} else {
+			// 正常完成，显示结果
+			const lastMessage = result.messages[result.messages.length - 1];
+			if (lastMessage && lastMessage.getType() === "ai") {
+				console.log("\n🤖 AI:", lastMessage.content);
+			} else {
+				console.log("\n🏁 Graph execution finished.");
+			}
 		}
 	}
 }
