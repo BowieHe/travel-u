@@ -53,10 +53,20 @@ export const createUserResponse = () => {
 		const currentTravelPlan: TripPlan = state.tripPlan || {};
 
 		try {
-			// todo)) add condition to improve the message filter
+			// 过滤消息：只保留 Human、AI 和 System 消息，排除 Tool 相关消息
+			const filteredMessages = state.messages.filter((msg) => {
+				const messageType = msg.getType();
+				return messageType === "human" || messageType === "ai";
+			});
+
 			const extractedInfo = await structuredLlm.invoke([
-				new SystemMessage({ content: extractionPrompt }),
-				...state.messages,
+				new SystemMessage({
+					content: extractionPrompt.replace(
+						"{trip_plan}",
+						JSON.stringify(currentTravelPlan, null, 2)
+					),
+				}),
+				...filteredMessages.slice(-3), // 只取最近3条非工具消息
 			]);
 
 			console.log("LLM原始提取结果:", extractedInfo);
@@ -81,7 +91,7 @@ export const createUserResponse = () => {
 			return {
 				tripPlan: currentTravelPlan,
 				messages: [
-					...state.messages,
+					// ...state.messages,
 					new AIMessage({
 						content:
 							"抱歉，我未能完全理解您的旅行计划信息，请您再详细说明一下。",

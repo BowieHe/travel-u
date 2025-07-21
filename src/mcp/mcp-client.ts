@@ -30,6 +30,11 @@ export class McpClientManager {
 		const allTools: ToolDefinition[] = [];
 		for (const [clientName, client] of this.clients.entries()) {
 			const clientToolsResult = await client.listTools();
+			console.log(
+				"get tools from client:",
+				clientName,
+				clientToolsResult.tools.map((tool) => tool.name).join(", ")
+			);
 			if (clientToolsResult && Array.isArray(clientToolsResult.tools)) {
 				for (const tool of clientToolsResult.tools) {
 					allTools.push({

@@ -1,5 +1,6 @@
 import {
 	TripPlan,
+	isTripPlanComplete,
 	convertTripPlanToMemory,
 	getMissingField,
 } from "@/tools/trip-plan";
@@ -36,14 +37,14 @@ function generateQuestionForUser(missingRequiredFields: string[]): string {
 	let followUpMessage = "";
 	if (
 		missingRequiredFields.includes("destination") &&
-		missingRequiredFields.includes("departureCity") &&
+		missingRequiredFields.includes("departure") &&
 		missingRequiredFields.includes("startDate")
 	) {
 		followUpMessage =
 			"请告诉我您想去哪里、从哪里出发，以及大概什么时候出发？";
 	} else if (
 		missingRequiredFields.includes("destination") &&
-		missingRequiredFields.includes("departureCity")
+		missingRequiredFields.includes("departure")
 	) {
 		followUpMessage = "请告诉我您想去哪里，以及从哪里出发？";
 	} else if (
@@ -52,13 +53,13 @@ function generateQuestionForUser(missingRequiredFields: string[]): string {
 	) {
 		followUpMessage = "您的目的地是哪里，大概什么时候出发？";
 	} else if (
-		missingRequiredFields.includes("departureCity") &&
+		missingRequiredFields.includes("departure") &&
 		missingRequiredFields.includes("startDate")
 	) {
 		followUpMessage = "您从哪里出发，大概什么时候出发？";
 	} else if (missingRequiredFields.includes("destination")) {
 		followUpMessage = "您的目的地是哪里？";
-	} else if (missingRequiredFields.includes("departureCity")) {
+	} else if (missingRequiredFields.includes("departure")) {
 		followUpMessage = "您从哪里出发？";
 	} else if (missingRequiredFields.includes("startDate")) {
 		followUpMessage = "大概什么时候出发？";
@@ -66,7 +67,7 @@ function generateQuestionForUser(missingRequiredFields: string[]): string {
 		// 针对其他（较少见）的必填字段组合，列出缺失项
 		const fieldToChineseMap: Record<string, string> = {
 			destination: "目的地",
-			departureCity: "出发城市",
+			departure: "出发城市",
 			startDate: "出发日期",
 			endDate: "结束日期",
 			budget: "预算",
@@ -85,7 +86,7 @@ function generateQuestionForUser(missingRequiredFields: string[]): string {
 // 询问用户节点
 const askUserNode = async (state: AgentState): Promise<Partial<AgentState>> => {
 	console.log("--- 询问用户节点 ---");
-	const currentTripPlan = state.tripPlan as TripPlan;
+	const currentTripPlan = state.tripPlan;
 
 	// 检查最后一条消息是否已经是问题
 	const lastMessage = state.messages[state.messages.length - 1];
@@ -94,26 +95,25 @@ const askUserNode = async (state: AgentState): Promise<Partial<AgentState>> => {
 		return {};
 	}
 
-	// 生成问题
-	const missingFields: string[] = new Array<string>();
+	// 生成问题 - 使用 getMissingField 获取缺失字段
+	let missingFields: string[] = new Array<string>();
 	if (lastMessage && lastMessage.getType() === "tool") {
-		const content = JSON.parse(lastMessage.content.toString());
-		missingFields.push(...content.missing_fields);
+		missingFields =
+			JSON.parse(lastMessage.content.toString()).missing_fields || [];
 	}
-	if (missingFields.length == 0) {
-		getMissingField(currentTripPlan).forEach((f) => {
-			if (!missingFields.includes(f)) {
-				missingFields.push(f);
-			}
-		});
+	// 如果没有获取到缺失字段，使用 getMissingField 函数
+	if (!missingFields.length) {
+		missingFields = getMissingField(currentTripPlan || {});
 	}
-
 	const question = generateQuestionForUser(missingFields);
 	console.log("生成问题:", question);
 
 	// 将AI的问题添加到现有messages中
 	return {
-		messages: [...state.messages, new AIMessage({ content: question })],
+		messages: [
+			// ...state.messages,
+			new AIMessage({ content: question }),
+		],
 	};
 };
 
@@ -132,7 +132,7 @@ const waitForUserNode = async (
 	// 将用户输入添加到消息历史中
 	return {
 		messages: [
-			...state.messages,
+			// ...state.messages,
 			new HumanMessage({ content: userInput as string }),
 		],
 	};
@@ -193,15 +193,16 @@ const completeInteractionNode = async (
 	state: AgentState
 ): Promise<Partial<AgentState>> => {
 	console.log("--- 完成用户交互 ---");
-	const tripPlan = state.tripPlan || {};
-	const memory = convertTripPlanToMemory(tripPlan);
+	// const tripPlan = state.tripPlan || {};
+	// const memory = convertTripPlanToMemory(tripPlan);
 
-	console.log("子图收集到的信息，转换为 memory:", memory);
+	// console.log("子图收集到的信息，转换为 memory:", memory);
 
-	return {
-		memory: { ...state.memory, ...memory },
-		user_interaction_complete: true,
-	};
+	// return {
+	// 	memory: { ...state.memory, ...memory },
+	// 	user_interaction_complete: true,
+	// };
+	return {};
 };
 
 export function createUserInteractionSubgraph(tools: DynamicStructuredTool[]) {

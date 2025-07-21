@@ -12,7 +12,7 @@ export const TRAVEL_AGENT_PROMPT = `
 2.  **必须调用工具**:
     *   如果发现缺失关键信息，**必须**调用 \`collect_user_info\` 工具。在 \`missing_fields\` 数组中，请使用以下精确的英文字段名来表示缺失的信息：
         *   \`destination\` (目的地)
-        *   \`departureCity\` (出发城市)
+        *   \`departure\` (出发城市)
         *   \`startDate\` (出发日期)
         *   \`endDate\` (结束日期)
         *   \`budget\` (预算)
