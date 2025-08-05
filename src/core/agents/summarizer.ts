@@ -1,5 +1,5 @@
-import { DeepSeek } from "@/models/deepseek";
-import { AgentState } from "@/types/type";
+import { DeepSeek } from "@/core/models/deepseek";
+import { AgentState } from "@/core/types/type";
 import {
 	SystemMessage,
 	AIMessage,

@@ -4,7 +4,7 @@ import {
 	TripPlan,
 	TransportationType,
 	getTripPlanSchema,
-} from "@/tools/trip-plan";
+} from "@/core/tools/trip-plan";
 
 /**
  * Represents the state of our LangGraph.

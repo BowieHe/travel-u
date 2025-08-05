@@ -1,7 +1,7 @@
 import { DynamicStructuredTool } from "@langchain/core/tools";
-import { Gemini } from "@/models/gemini";
+import { Gemini } from "@/core/models/gemini";
 import { z } from "zod";
-import { AgentState } from "@/types/type";
+import { AgentState } from "@/core/types/type";
 import {
 	AIMessage,
 	SystemMessage,

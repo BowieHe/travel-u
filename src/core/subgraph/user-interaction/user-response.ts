@@ -1,7 +1,7 @@
-import { AgentState, TripPlan, TripPlanSchema } from "@/types/type";
-import { Gemini } from "@/models/gemini";
+import { AgentState, TripPlan, TripPlanSchema } from "@/core/types/type";
+import { Gemini } from "@/core/models/gemini";
 import { AIMessage, SystemMessage } from "@langchain/core/messages";
-import { isTripPlanComplete, mergeTripPlan } from "@/tools/trip-plan";
+import { isTripPlanComplete, mergeTripPlan } from "@/core/tools/trip-plan";
 
 export const createUserResponse = () => {
 	const gemini = new Gemini();

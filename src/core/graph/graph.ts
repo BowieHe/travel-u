@@ -1,21 +1,21 @@
 import { START, END, StateGraph } from "@langchain/langgraph";
 import { MemorySaver } from "@langchain/langgraph-checkpoint";
-import { AgentState } from "@/types/type";
-import { createOrchestrator } from "@/agents/orchestrator";
-import { createMcpTools } from "@/mcp/mcp-tools";
-import { subtaskParserNode } from "@/agents/subtask-parser";
+import { AgentState } from "@/core/types/type";
+import { createOrchestrator } from "@/core/agents/orchestrator";
+import { createMcpTools } from "@/core/mcp/mcp-tools";
+import { subtaskParserNode } from "@/core/agents/subtask-parser";
 import {
 	createSubtaskTool,
 	generateTaskPromptTool,
 	collectUserInfoTool,
-} from "@/agents/orchestrator";
-import { TaskType } from "@/utils/task-type";
-import { createSummarizer } from "@/agents/summarizer";
-import { FOOD_PROMPT, ROUTER_PROMPT, SPOT_PROMPT } from "@/agents/prompt";
-import { createSafeSpecialistAgent } from "@/agents/specialist";
-import { graphState } from "@/types/state";
-import { validateMessageSequence } from "@/types/state";
-import { createUserInteractionSubgraph } from "@/subgraph/user-interaction/graph";
+} from "@/core/agents/orchestrator";
+import { TaskType } from "@/core/utils/task-type";
+import { createSummarizer } from "@/core/agents/summarizer";
+import { FOOD_PROMPT, ROUTER_PROMPT, SPOT_PROMPT } from "@/core/agents/prompt";
+import { createSafeSpecialistAgent } from "@/core/agents/specialist";
+import { graphState } from "@/core/types/state";
+import { validateMessageSequence } from "@/core/types/state";
+import { createUserInteractionSubgraph } from "@/core/subgraph/user-interaction/graph";
 
 /**
  * Router for the Orchestrator.

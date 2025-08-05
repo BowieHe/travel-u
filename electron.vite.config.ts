@@ -7,7 +7,10 @@ export default defineConfig({
 		plugins: [externalizeDepsPlugin()],
 		build: {
 			rollupOptions: {
-				input: resolve(import.meta.dirname || __dirname, "src/main.ts"),
+				input: resolve(
+					import.meta.dirname || __dirname,
+					"src/main/main.ts"
+				),
 			},
 		},
 	},
@@ -17,7 +20,7 @@ export default defineConfig({
 			rollupOptions: {
 				input: resolve(
 					import.meta.dirname || __dirname,
-					"src/preload.ts"
+					"src/preload/preload.ts"
 				),
 			},
 		},
