@@ -1,43 +1,44 @@
 {
-    "name": "travel-u",
-    "version": "1.0.0",
-    "description": "",
-    "main": "index.js",
-    "scripts": {
-        "start": "npx ts-node -r tsconfig-paths/register src/index.ts",
-        "build": "tsc",
-        "test": "vitest",
-        "coverage": "vitest run --coverage"
-    },
-    "repository": {
-        "type": "git",
-        "url": "git+https://github.com/BowieHe/travel-u.git"
-    },
-    "keywords": [],
-    "author": "",
-    "license": "ISC",
-    "type": "commonjs",
-    "bugs": {
-        "url": "https://github.com/BowieHe/travel-u/issues"
-    },
-    "homepage": "https://github.com/BowieHe/travel-u#readme",
-    "dependencies": {
-        "@langchain/core": "^0.3.61",
-        "@langchain/deepseek": "^0.0.2",
-        "@langchain/google-genai": "^0.2.14",
-        "@langchain/langgraph": "^0.3.6",
-        "@modelcontextprotocol/sdk": "^1.15.0",
-        "dotenv": "^17.0.1",
-        "langchain": "^0.3.29",
-        "langsmith": "^0.3.41"
-    },
-    "devDependencies": {
-        "@types/node": "^24.0.10",
-        "@vitest/coverage-v8": "^3.2.4",
-        "ts-node": "^10.9.2",
-        "tsconfig-paths": "^4.2.0",
-        "typescript": "^5.8.3",
-        "vitest": "^3.2.4"
-    },
-    "packageManager": "yarn@4.7.0+sha512.5a0afa1d4c1d844b3447ee3319633797bcd6385d9a44be07993ae52ff4facabccafb4af5dcd1c2f9a94ac113e5e9ff56f6130431905884414229e284e37bb7c9"
+	"name": "travel-u",
+	"version": "1.0.0",
+	"description": "Travel companion Electron app",
+	"main": "out/main/main.js",
+	"scripts": {
+		"start": "electron-vite preview",
+		"dev": "dotenv electron-vite dev",
+		"build": "electron-vite build",
+		"clean": "rimraf dist"
+	},
+	"repository": {
+		"type": "git",
+		"url": "git+https://github.com/BowieHe/travel-u.git"
+	},
+	"keywords": [],
+	"author": "",
+	"license": "ISC",
+	"type": "commonjs",
+	"bugs": {
+		"url": "https://github.com/BowieHe/travel-u/issues"
+	},
+	"homepage": "https://github.com/BowieHe/travel-u#readme",
+	"dependencies": {
+		"@langchain/core": "^0.3.61",
+		"@langchain/deepseek": "^0.0.2",
+		"@langchain/google-genai": "^0.2.14",
+		"@langchain/langgraph": "^0.3.6",
+		"@modelcontextprotocol/sdk": "^1.15.0",
+		"dotenv": "^17.0.1",
+		"langchain": "^0.3.29"
+	},
+	"devDependencies": {
+		"@types/node": "^24.0.10",
+		"dotenv-cli": "^10.0.0",
+		"electron": "^27.0.0",
+		"electron-vite": "^2.3.0",
+		"rimraf": "^5.0.0",
+		"tailwindcss": "^3.4.0",
+		"typescript": "^5.8.3",
+		"vite": "^5.0.0"
+	},
+	"packageManager": "yarn@4.9.0"
 }

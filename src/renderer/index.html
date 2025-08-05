@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset="UTF-8" />
+		<title>Travel-U</title>
+		<meta
+			http-equiv="Content-Security-Policy"
+			content="default-src 'self'; script-src 'self' 'unsafe-inline';"
+		/>
+	</head>
+	<body
+		class="min-h-screen bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500"
+	>
+		<div id="app" class="min-h-screen flex flex-col">
+			<header
+				class="bg-white/10 backdrop-blur-lg p-8 text-center text-white"
+			>
+				<h1 class="text-4xl font-bold mb-2">Travel-U</h1>
+				<p class="text-lg opacity-90">Your travel companion app</p>
+			</header>
+
+			<main class="flex-1 p-8 max-w-6xl mx-auto w-full">
+				<section
+					class="bg-white p-8 rounded-xl mb-8 shadow-lg text-center"
+				>
+					<h2 class="text-3xl font-bold text-indigo-600 mb-4">
+						Welcome to Travel-U
+					</h2>
+					<p class="text-gray-600 text-lg">
+						Plan your perfect trip with our comprehensive travel
+						tools.
+					</p>
+				</section>
+
+				<section
+					class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"
+				>
+					<div
+						class="bg-white p-6 rounded-xl shadow-lg hover:shadow-xl transform hover:-translate-y-2 transition-all duration-300 cursor-pointer"
+					>
+						<h3 class="text-xl font-bold text-indigo-600 mb-3">
+							Trip Planning
+						</h3>
+						<p class="text-gray-600">
+							Organize your itinerary and bookings
+						</p>
+					</div>
+					<div
+						class="bg-white p-6 rounded-xl shadow-lg hover:shadow-xl transform hover:-translate-y-2 transition-all duration-300 cursor-pointer"
+					>
+						<h3 class="text-xl font-bold text-indigo-600 mb-3">
+							Local Guides
+						</h3>
+						<p class="text-gray-600">
+							Discover hidden gems and local recommendations
+						</p>
+					</div>
+					<div
+						class="bg-white p-6 rounded-xl shadow-lg hover:shadow-xl transform hover:-translate-y-2 transition-all duration-300 cursor-pointer"
+					>
+						<h3 class="text-xl font-bold text-indigo-600 mb-3">
+							Travel Documents
+						</h3>
+						<p class="text-gray-600">
+							Keep all your important documents in one place
+						</p>
+					</div>
+				</section>
+			</main>
+
+			<footer class="bg-black/10 p-4 text-center text-white text-sm">
+				<p>
+					Electron:
+					<span id="electron-version" class="font-bold"></span>
+				</p>
+				<p>
+					Chrome: <span id="chrome-version" class="font-bold"></span>
+				</p>
+				<p>Node: <span id="node-version" class="font-bold"></span></p>
+			</footer>
+		</div>
+
+		<script type="module" src="renderer.js"></script>
+	</body>
+</html>

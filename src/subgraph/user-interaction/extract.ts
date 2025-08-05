@@ -2,7 +2,6 @@ import { Gemini } from "@/models/gemini";
 import { AgentState, TripPlanSchema } from "@/types/type";
 import { TripPlan, mergeTripPlan } from "@/tools/trip-plan";
 import { AIMessage, SystemMessage } from "@langchain/core/messages";
-import { deprecate } from "util";
 
 export async function extractAndUpdateTravelPlan(
 	state: AgentState
