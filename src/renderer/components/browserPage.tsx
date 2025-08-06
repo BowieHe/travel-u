@@ -1,5 +1,10 @@
 import React, { useEffect, useState } from "react";
-import { ChevronsLeft, ChevronsRight, Loader2, AlertCircle } from "lucide-react";
+import {
+    ChevronsLeft,
+    ChevronsRight,
+    Loader2,
+    AlertCircle,
+} from "lucide-react";
 
 // BrowserView 抽屉组件
 const BrowserViewDrawer: React.FC<{
@@ -24,9 +29,14 @@ const BrowserViewDrawer: React.FC<{
             if (loading) setError(null); // 清除之前的错误
         };
 
-        const handleError = (errorInfo: { errorCode: number; errorDescription: string }) => {
+        const handleError = (errorInfo: {
+            errorCode: number;
+            errorDescription: string;
+        }) => {
             setIsLoading(false);
-            setError(`加载失败: ${errorInfo.errorDescription} (${errorInfo.errorCode})`);
+            setError(
+                `加载失败: ${errorInfo.errorDescription} (${errorInfo.errorCode})`
+            );
         };
 
         // 添加事件监听器
