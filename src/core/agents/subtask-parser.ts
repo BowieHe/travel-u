@@ -1,6 +1,6 @@
-import { AgentState } from "@/core/types/type";
-import { extractAndParseJSON } from "@/core/utils/json-parser"; // 你的 JSON 解析工具
-import { AnyExpertTask } from "@/core/utils/task-type";
+import { AgentState } from "../types/type";
+import { extractAndParseJSON } from "../utils/json-parser"; // 你的 JSON 解析工具
+import { AnyExpertTask } from "../utils/task-type";
 
 // todo) add basic information into memory
 export const subtaskParserNode = async (

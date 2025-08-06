@@ -11,8 +11,8 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
 import * as fs from "fs/promises";
 import * as path from "path";
-import { MCPConfigs, ToolDefinition } from "@/core/mcp/types";
-import { interpolateEnvVars, resolveCommandPath } from "@/core/utils/command";
+import { MCPConfigs, ToolDefinition } from "./types";
+import { interpolateEnvVars, resolveCommandPath } from "../utils/command";
 
 /**
  * A manager class to hold and interact with multiple MCP clients.

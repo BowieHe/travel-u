@@ -1,6 +1,6 @@
-import { Gemini } from "@/core/models/gemini";
-import { AgentState, TripPlanSchema } from "@/core/types/type";
-import { TripPlan, mergeTripPlan } from "@/core/tools/trip-plan";
+import { Gemini } from "../../models/gemini";
+import { AgentState, TripPlanSchema } from "../../types/type";
+import { TripPlan, mergeTripPlan } from "../../tools/trip-plan";
 import { AIMessage, SystemMessage } from "@langchain/core/messages";
 
 export async function extractAndUpdateTravelPlan(
@@ -28,7 +28,7 @@ export async function extractAndUpdateTravelPlan(
 
 	const gemini = new Gemini();
 	const llm = gemini.llm("gemini-2.5-flash-lite-preview-06-17");
-	const structuredLlm = llm.withStructuredOutput(TripPlanSchema);
+	const structuredLlm = (llm.withStructuredOutput as any)(TripPlanSchema);
 
 	const extractionPrompt = `你是一个专业的旅行信息提取助手。
 

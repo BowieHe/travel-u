@@ -2,7 +2,7 @@ import { DynamicStructuredTool } from "@langchain/core/tools";
 import { createReactAgent } from "@langchain/langgraph/prebuilt";
 import { DeepSeek } from "../models/deepseek";
 import { Runnable } from "@langchain/core/runnables";
-import { AgentState } from "@/core/types/type";
+import { AgentState } from "../types/type";
 import {
 	ChatPromptTemplate,
 	MessagesPlaceholder,

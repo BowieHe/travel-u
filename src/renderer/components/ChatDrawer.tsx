@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
 	HelpCircle,
 	RotateCcw,
@@ -7,11 +7,21 @@ import {
 	Send,
 	ChevronsLeft,
 	ChevronsRight,
+	Bot,
+	User,
 } from "lucide-react";
 
 interface SuggestionItem {
 	id: string;
 	text: string;
+}
+
+interface Message {
+	id: string;
+	content: string;
+	sender: "user" | "ai";
+	timestamp: Date;
+	isLoading?: boolean;
 }
 
 // 对话抽屉组件 - 完全基于HTML原型重新设计
@@ -20,6 +30,25 @@ export const ChatDrawer: React.FC<{
 	onToggle: () => void;
 }> = ({ isOpen, onToggle }) => {
 	const [inputMessage, setInputMessage] = useState("");
+	const [messages, setMessages] = useState<Message[]>([
+		{
+			id: "1",
+			content:
+				"你好！我是你的旅行助手，可以帮你规划行程。请告诉我你想去哪里？",
+			sender: "ai",
+			timestamp: new Date(),
+		},
+	]);
+	const [isLoading, setIsLoading] = useState(false);
+	const messagesEndRef = useRef<HTMLDivElement>(null);
+
+	const scrollToBottom = () => {
+		messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+	};
+
+	useEffect(() => {
+		scrollToBottom();
+	}, [messages]);
 
 	const suggestions: SuggestionItem[] = [
 		{
@@ -48,11 +77,50 @@ export const ChatDrawer: React.FC<{
 		setInputMessage(suggestion.text);
 	};
 
-	const sendMessage = () => {
-		if (inputMessage.trim() === "") return;
-		// 这里可以添加发送消息的逻辑
-		console.log("发送消息:", inputMessage);
+	const sendMessage = async () => {
+		if (inputMessage.trim() === "" || isLoading) return;
+
+		const userMessage: Message = {
+			id: Date.now().toString(),
+			content: inputMessage,
+			sender: "user",
+			timestamp: new Date(),
+		};
+
+		// 添加用户消息到对话
+		setMessages((prev) => [...prev, userMessage]);
+		const currentMessage = inputMessage;
 		setInputMessage("");
+		setIsLoading(true);
+
+		try {
+			// 调用 Electron API 发送消息给 LangGraph
+			const aiResponse = await window.electronAPI.sendMessage(
+				currentMessage
+			);
+
+			// 添加 AI 回复到对话
+			const aiMessage: Message = {
+				id: (Date.now() + 1).toString(),
+				content: aiResponse,
+				sender: "ai",
+				timestamp: new Date(),
+			};
+
+			setMessages((prev) => [...prev, aiMessage]);
+		} catch (error) {
+			console.error("发送消息失败:", error);
+			// 添加错误消息
+			const errorMessage: Message = {
+				id: (Date.now() + 2).toString(),
+				content: "抱歉，我遇到了一个错误，请稍后重试。",
+				sender: "ai",
+				timestamp: new Date(),
+			};
+			setMessages((prev) => [...prev, errorMessage]);
+		} finally {
+			setIsLoading(false);
+		}
 	};
 
 	const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -129,43 +197,133 @@ export const ChatDrawer: React.FC<{
 						</div>
 					</header>
 
-					{/* 建议区域 - 完全复制HTML原型 */}
+					{/* 建议区域或消息区域 */}
 					<main
 						className="flex-1 overflow-y-auto"
 						style={{ padding: "0 24px" }}
 					>
-						{suggestions.map((suggestion) => (
-							<div
-								key={suggestion.id}
-								className="cursor-pointer transition-colors"
-								style={{
-									padding: "18px 0",
-									borderBottom: "1px solid #eae8e2",
-								}}
-								onMouseEnter={(e) => {
-									e.currentTarget.style.backgroundColor =
-										"rgba(0, 0, 0, 0.02)";
-								}}
-								onMouseLeave={(e) => {
-									e.currentTarget.style.backgroundColor =
-										"transparent";
-								}}
-								onClick={() =>
-									handleSuggestionClick(suggestion)
-								}
-							>
-								<p
+						{messages.length <= 1 ? (
+							// 显示建议（初始状态）
+							suggestions.map((suggestion) => (
+								<div
+									key={suggestion.id}
+									className="cursor-pointer transition-colors"
 									style={{
-										lineHeight: "1.5",
-										fontSize: "15px",
-										color: "#79736a",
-										margin: "0",
+										padding: "18px 0",
+										borderBottom: "1px solid #eae8e2",
 									}}
+									onMouseEnter={(e) => {
+										e.currentTarget.style.backgroundColor =
+											"rgba(0, 0, 0, 0.02)";
+									}}
+									onMouseLeave={(e) => {
+										e.currentTarget.style.backgroundColor =
+											"transparent";
+									}}
+									onClick={() =>
+										handleSuggestionClick(suggestion)
+									}
 								>
-									{suggestion.text}
-								</p>
+									<p
+										style={{
+											lineHeight: "1.5",
+											fontSize: "15px",
+											color: "#79736a",
+											margin: "0",
+										}}
+									>
+										{suggestion.text}
+									</p>
+								</div>
+							))
+						) : (
+							// 显示对话消息
+							<div className="space-y-6 py-4">
+								{messages.map((message) => (
+									<div
+										key={message.id}
+										className={`flex gap-3 ${
+											message.sender === "user"
+												? "ml-auto flex-row-reverse max-w-[80%]"
+												: "max-w-[85%]"
+										}`}
+									>
+										{/* 头像 */}
+										<div
+											className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 mt-1 ${
+												message.sender === "ai"
+													? "bg-gray-100 text-gray-600"
+													: "bg-blue-500 text-white"
+											}`}
+										>
+											{message.sender === "ai" ? (
+												<Bot size={16} />
+											) : (
+												<User size={16} />
+											)}
+										</div>
+
+										{/* 消息气泡 */}
+										<div
+											className={`rounded-[18px] px-4 py-3 relative ${
+												message.sender === "user"
+													? "bg-blue-500 text-white"
+													: "bg-white border border-gray-200 text-gray-700"
+											} shadow-sm`}
+										>
+											<p className="text-sm leading-relaxed mb-1">
+												{message.content}
+											</p>
+											<p
+												className={`text-xs ${
+													message.sender === "user"
+														? "text-white/70"
+														: "text-gray-500"
+												}`}
+											>
+												{message.timestamp.toLocaleTimeString(
+													[],
+													{
+														hour: "2-digit",
+														minute: "2-digit",
+													}
+												)}
+											</p>
+										</div>
+									</div>
+								))}
+
+								{/* 加载指示器 */}
+								{isLoading && (
+									<div className="flex gap-3 max-w-[85%]">
+										<div className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center flex-shrink-0 mt-1">
+											<Bot
+												size={16}
+												className="text-gray-600"
+											/>
+										</div>
+										<div className="bg-white border border-gray-200 rounded-[18px] px-4 py-3 shadow-sm">
+											<div className="flex gap-1">
+												<div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
+												<div
+													className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
+													style={{
+														animationDelay: "0.1s",
+													}}
+												></div>
+												<div
+													className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
+													style={{
+														animationDelay: "0.2s",
+													}}
+												></div>
+											</div>
+										</div>
+									</div>
+								)}
+								<div ref={messagesEndRef} />
 							</div>
-						))}
+						)}
 					</main>
 
 					{/* 输入区域 - 完全复制HTML原型 */}
@@ -215,7 +373,14 @@ export const ChatDrawer: React.FC<{
 							{/* 发送按钮 */}
 							<button
 								onClick={sendMessage}
-								className="bg-transparent border-none cursor-pointer"
+								disabled={
+									inputMessage.trim() === "" || isLoading
+								}
+								className={`bg-transparent border-none cursor-pointer ${
+									inputMessage.trim() === "" || isLoading
+										? "opacity-50 cursor-not-allowed"
+										: "hover:opacity-80"
+								} transition-opacity`}
 								style={{ padding: "0" }}
 							>
 								<Send size={24} style={{ color: "#8c8c6a" }} />

@@ -5,6 +5,11 @@ import tailwindcss from "tailwindcss";
 export default defineConfig({
 	main: {
 		plugins: [externalizeDepsPlugin()],
+		resolve: {
+			alias: {
+				"@": resolve(__dirname, "src"),
+			},
+		},
 		build: {
 			rollupOptions: {
 				input: resolve(
@@ -16,6 +21,11 @@ export default defineConfig({
 	},
 	preload: {
 		plugins: [externalizeDepsPlugin()],
+		resolve: {
+			alias: {
+				"@": resolve(__dirname, "src"),
+			},
+		},
 		build: {
 			rollupOptions: {
 				input: resolve(
@@ -27,6 +37,11 @@ export default defineConfig({
 	},
 	renderer: {
 		root: "src/renderer",
+		resolve: {
+			alias: {
+				"@": resolve(__dirname, "src"),
+			},
+		},
 		build: {
 			rollupOptions: {
 				input: resolve(

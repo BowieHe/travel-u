@@ -1,10 +1,7 @@
 import { BaseMessage } from "@langchain/core/messages";
 import { AnyExpertTask, TaskType } from "../utils/task-type";
-import {
-	TripPlan,
-	TransportationType,
-	getTripPlanSchema,
-} from "@/core/tools/trip-plan";
+import type { TripPlan, TransportationType } from "../tools/trip-plan";
+import { getTripPlanSchema } from "../tools/trip-plan";
 
 /**
  * Represents the state of our LangGraph.
