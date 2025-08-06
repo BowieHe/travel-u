@@ -2,7 +2,7 @@
 	"name": "travel-u",
 	"version": "1.0.0",
 	"description": "Travel companion Electron app",
-	"main": "out/main/main.js",
+	"main": "out/main/index.js",
 	"scripts": {
 		"start": "electron-vite preview",
 		"dev": "dotenv electron-vite dev",
@@ -37,6 +37,7 @@
 		"@types/node": "^24.0.10",
 		"@types/react": "^19.1.9",
 		"@types/react-dom": "^19.1.7",
+		"@vitejs/plugin-react": "^4.7.0",
 		"dotenv-cli": "^10.0.0",
 		"electron": "^27.0.0",
 		"electron-vite": "^2.3.0",
