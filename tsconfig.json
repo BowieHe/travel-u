@@ -6,7 +6,17 @@
 		"jsx": "react-jsx",
 		"baseUrl": ".",
 		"paths": {
-			"@/*": ["src/*"]
+			"@/*": ["src/*"],
+			"@main/*": ["src/main/*"],
+			"@services/*": ["src/main/services/*"],
+			"@shared/*": ["src/shared/*"],
+			"@ai/*": ["src/ai/*"],
+			"@integrations/*": ["src/integrations/*"],
+			"@lib/*": ["src/lib/*"],
+			"@renderer/*": ["src/renderer/*"],
+			"@hooks/*": ["src/renderer/hooks/*"],
+			"@components/*": ["src/renderer/components/*"],
+			"@config/*": ["config/*"]
 		},
 		"types": ["node"],
 		"resolveJsonModule": true,

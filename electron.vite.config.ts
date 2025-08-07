@@ -10,6 +10,7 @@ export default defineConfig({
             alias: {
                 "@": resolve(__dirname, "src"),
                 "@main": resolve(__dirname, "src/main"),
+                "@services": resolve(__dirname, "src/main/services"),
                 "@shared": resolve(__dirname, "src/shared"),
                 "@ai": resolve(__dirname, "src/ai"),
                 "@integrations": resolve(__dirname, "src/integrations"),
@@ -31,6 +32,7 @@ export default defineConfig({
             alias: {
                 "@": resolve(__dirname, "src"),
                 "@main": resolve(__dirname, "src/main"),
+                "@services": resolve(__dirname, "src/main/services"),
                 "@shared": resolve(__dirname, "src/shared"),
                 "@ai": resolve(__dirname, "src/ai"),
                 "@integrations": resolve(__dirname, "src/integrations"),

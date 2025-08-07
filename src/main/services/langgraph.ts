@@ -1,25 +1,16 @@
-import { initializeGraph } from "../../ai/workflows/main-graph";
 import { HumanMessage } from "@langchain/core/messages";
-import { AgentState } from "../../shared/types/agent";
+import { initializeGraph } from "./workflows/main-graph";
+import { AgentState } from "./utils/agent-type";
 
 /**
- * LangGraph 服务
- * 负责管理AI代理的对话处理
+ * LangGraph 服务类
+ * 处理聊天消息并执行 AI 工作流
  */
 export class LangGraphService {
     private static instance: LangGraphService | null = null;
-    private travelGraph: any = null;
+    private graph: any = null;
     private isInitialized = false;
-
-    private conversationState: AgentState = {
-        messages: [],
-        next: "orchestrator",
-        tripPlan: {},
-        memory: {},
-        subtask: [],
-        currentTaskIndex: 0,
-        user_interaction_complete: false,
-    };
+    private initializationPromise: Promise<void> | null = null;
 
     private constructor() {}
 
@@ -38,11 +29,20 @@ export class LangGraphService {
             return;
         }
 
+        if (this.initializationPromise) {
+            return this.initializationPromise;
+        }
+
+        this.initializationPromise = this.doInitialize();
+        return this.initializationPromise;
+    }
+
+    private async doInitialize(): Promise<void> {
         try {
             console.log("初始化 LangGraph...");
-            this.travelGraph = await initializeGraph();
-            this.isInitialized = true;
+            this.graph = await initializeGraph();
             console.log("LangGraph 初始化成功");
+            this.isInitialized = true;
         } catch (error) {
             console.error("LangGraph 初始化失败:", error);
             throw error;
@@ -50,67 +50,66 @@ export class LangGraphService {
     }
 
     /**
-     * 处理用户消息
+     * 流式处理消息 - 唯一的消息处理方式
      */
-    async processMessage(message: string): Promise<string> {
-        // 确保图已初始化
-        if (!this.isInitialized) {
-            await this.initialize();
+    async *streamMessage(
+        message: string,
+        sessionId: string = "default"
+    ): AsyncGenerator<string, void, unknown> {
+        if (!this.isInitialized || !this.graph) {
+            yield "LangGraph 未初始化";
+            return;
         }
 
         try {
-            // 创建用户消息
-            const userMessage = new HumanMessage({ content: message });
+            console.log(`流式处理用户消息: ${message}`);
 
-            // 更新对话状态
-            this.conversationState.messages = [
-                ...this.conversationState.messages,
-                userMessage,
-            ];
+            const initialState: Partial<AgentState> = {
+                messages: [new HumanMessage(message)],
+                tripPlan: {},
+                user_interaction_complete: true,
+            };
 
-            // 调用图处理消息
-            console.log("调用 LangGraph 处理消息...");
-            const result = await this.travelGraph.invoke(
-                this.conversationState,
-                {
-                    configurable: { thread_id: "travel-chat-session" },
+            const config = {
+                configurable: {
+                    thread_id: sessionId,
+                },
+            };
+
+            // 流式执行
+            for await (const event of this.graph.stream(initialState, config)) {
+                console.log("Stream event:", event);
+
+                // 根据事件类型提取内容并流式返回
+                if (event && typeof event === "object") {
+                    const eventData = Object.values(event)[0] as any;
+                    if (eventData?.messages?.length > 0) {
+                        const lastMessage =
+                            eventData.messages[eventData.messages.length - 1];
+                        if (lastMessage?.content) {
+                            yield lastMessage.content;
+                        }
+                    }
                 }
-            );
-
-            // 更新对话状态
-            this.conversationState = { ...this.conversationState, ...result };
-
-            // 获取最后一条 AI 消息作为回复
-            const lastMessage = result.messages[result.messages.length - 1];
-            const aiResponse =
-                lastMessage?.content || "抱歉，我遇到了一些问题，请重试。";
-
-            return aiResponse;
-        } catch (error) {
-            console.error("LangGraph 处理消息错误:", error);
-            throw error;
+            }
+        } catch (error: any) {
+            console.error("流式处理消息时出错:", error);
+            yield `流式处理错误: ${error.message}`;
         }
     }
 
     /**
-     * 获取当前对话状态
+     * 检查是否已准备就绪
      */
-    getConversationState(): AgentState {
-        return { ...this.conversationState };
+    isReady(): boolean {
+        return this.isInitialized && this.graph !== null;
     }
 
     /**
-     * 重置对话
+     * 重置会话状态
      */
-    resetConversation(): void {
-        this.conversationState = {
-            messages: [],
-            next: "orchestrator",
-            tripPlan: {},
-            memory: {},
-            subtask: [],
-            currentTaskIndex: 0,
-            user_interaction_complete: false,
-        };
+    async resetSession(sessionId: string): Promise<void> {
+        // 这里可以实现清除特定会话的状态逻辑
+        console.log(`重置会话: ${sessionId}`);
     }
 }

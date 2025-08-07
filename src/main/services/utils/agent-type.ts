@@ -1,22 +1,58 @@
 import { BaseMessage } from "@langchain/core/messages";
+import { AnyExpertTask, TaskType } from "../utils/task-type";
 
-/**
- * LangGraph 代理状态接口
- */
+export type AgentNode =
+    | "orchestrator"
+    | "transportation_specialist"
+    | "destination_specialist"
+    | "subtask_parser"
+    | "summary"
+    | "tools"
+    | "router"
+    | "ask_user";
+
+export type UserNode = "ask_user" | "process_response" | "reletive_time";
+
+type Outcome = "success" | "reprompt" | "cancel";
+
+export type SpecialistNode =
+    | "transportation_specialist"
+    | "destination_specialist"
+    | "food_specialist";
+
 export interface AgentState {
-    messages: BaseMessage[];
-    next: string;
-    tripPlan?: Record<string, any>;
+    messages: Array<BaseMessage>;
+    next: AgentNode | "END" | TaskType | UserNode;
+
+    // todo)) might be same
     memory: Record<string, any>;
-    subtask: any[];
+    tripPlan?: TripPlan;
+    // for subtasks
+    subtask: Array<AnyExpertTask>;
     currentTaskIndex: number;
+
+    currentSpecialist?: SpecialistNode | "END";
+
+    errorMessage?: string;
+
+    // userInteractionState?: UserInteractionState;
+
+    // 用户交互是否完成
     user_interaction_complete?: boolean;
-    errorMessage?: string; // 可选的错误消息
 }
 
-/**
- * 旅行计划相关类型
- */
+export interface UserInteractionState {
+    messages: Array<BaseMessage>;
+    // 从主图传入的问题信息
+    questionFromNode?: string;
+    // 用户的回复
+    userResponse?: string;
+    // 子图的处理结果
+    interactionOutcome?: Outcome;
+    // 提取的信息（返回给主图）
+    extractedInfo?: Record<string, string>;
+}
+
 export interface TripPlan {
     destination?: string;
     startDate?: string;

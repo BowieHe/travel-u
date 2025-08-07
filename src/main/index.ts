@@ -1,25 +1,30 @@
 import { app, BrowserWindow } from "electron";
 import * as dotenv from "dotenv";
 import * as path from "path";
-import { createWindow, cleanupWindow } from "./window";
-import { McpService } from "./services/mcp";
-import { IPC_CHANNELS } from "../shared/constants/config";
+// import { createWindow, cleanupWindow } from "./window";
+import { McpService } from "@services/mcp/mcp";
+import { ChatIpcHandler } from "./ipc/chat";
 
 // 加载环境变量
 dotenv.config({ path: path.join(__dirname, "../../.env") });
 
-let mainWindow: BrowserWindow;
+// let mainWindow: BrowserWindow;
+let chatIpcHandler: ChatIpcHandler;
 
 /**
  * 应用程序入口点
  */
+// todo)) finish the browser window creation later
 async function main() {
     await app.whenReady();
-    
-    // 1. 立即创建窗口，不等待MCP客户端
-    mainWindow = createWindow();
 
-    // 2. 在后台异步初始化 MCP Client（不阻塞界面）
+    // 1. 初始化 IPC 处理器
+    chatIpcHandler = new ChatIpcHandler();
+
+    // 2. 立即创建窗口，不等待MCP客户端
+    // mainWindow = createWindow();
+
+    // 3. 在后台异步初始化 MCP Client（不阻塞界面）
     initializeMcpClient().catch((error) => {
         console.error("后台初始化 MCP Client 失败:", error);
     });
@@ -33,24 +38,24 @@ async function initializeMcpClient(): Promise<void> {
         const mcpService = McpService.getInstance();
         await mcpService.initialize();
 
-        // 通知渲染进程MCP初始化完成
-        if (mainWindow && !mainWindow.isDestroyed()) {
-            const status = await mcpService.getStatus();
-            mainWindow.webContents.send(IPC_CHANNELS.MCP_INITIALIZED, {
-                success: true,
-                toolCount: status.tools.length,
-            });
-        }
+        // // 通知渲染进程MCP初始化完成
+        // if (mainWindow && !mainWindow.isDestroyed()) {
+        //     const status = await mcpService.getStatus();
+        //     mainWindow.webContents.send(IPC_CHANNELS.MCP_INITIALIZED, {
+        //         success: true,
+        //         toolCount: status.tools.length,
+        //     });
+        // }
     } catch (error) {
         console.error("MCP Client Manager 初始化失败:", error);
 
-        // 通知渲染进程MCP初始化失败
-        if (mainWindow && !mainWindow.isDestroyed()) {
-            mainWindow.webContents.send(IPC_CHANNELS.MCP_INITIALIZED, {
-                success: false,
-                error: error instanceof Error ? error.message : String(error),
-            });
-        }
+        // // 通知渲染进程MCP初始化失败
+        // if (mainWindow && !mainWindow.isDestroyed()) {
+        //     mainWindow.webContents.send(IPC_CHANNELS.MCP_INITIALIZED, {
+        //         success: false,
+        //         error: error instanceof Error ? error.message : String(error),
+        //     });
+        // }
     }
 }
 
@@ -59,9 +64,9 @@ async function initializeMcpClient(): Promise<void> {
  */
 app.on("window-all-closed", () => {
     // 清理窗口资源
-    if (mainWindow) {
-        cleanupWindow(mainWindow);
-    }
+    // if (mainWindow) {
+    //     cleanupWindow(mainWindow);
+    // }
 
     // 清理 MCP Client
     const mcpService = McpService.getInstance();
@@ -73,14 +78,19 @@ app.on("window-all-closed", () => {
 });
 
 app.on("activate", () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
-        mainWindow = createWindow();
-    }
+    // if (BrowserWindow.getAllWindows().length === 0) {
+    //     mainWindow = createWindow();
+    // }
 });
 
 app.on("before-quit", async () => {
-    if (mainWindow) {
-        cleanupWindow(mainWindow);
+    // if (mainWindow) {
+    //     cleanupWindow(mainWindow);
+    // }
+
+    // 清理 IPC 处理器
+    if (chatIpcHandler) {
+        chatIpcHandler.cleanup();
     }
 
     // 清理 MCP Client
