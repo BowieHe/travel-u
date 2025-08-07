@@ -67,29 +67,36 @@ export const initializeGraph = async () => {
     // 2. Create the orchestrator agent (the ReAct agent executor)
     const orchestrator = createOrchestrator();
     const userInteractionSubgraph = createUserInteractionSubgraph(
-        mcpTools["time"]
+        // mcpTools["time"]
+        []
     ); // 直接调用，无需 await/compile
     const summarizer = createSummarizer();
 
     // 3. Create specialist agents and their tool nodes
-    const transportTools = [
-        ...mcpTools["12306-mcp"],
-        ...mcpTools["variflight"],
-    ];
-    const destinationTools = [...mcpTools["amap-maps"], ...mcpTools["fetch"]];
-    const foodTools = [...mcpTools["amap-maps"], ...mcpTools["fetch"]];
+    // const transportTools = [
+    //     ...mcpTools["12306-mcp"],
+    //     ...mcpTools["variflight"],
+        
+    // ];
+    // const destinationTools = [...mcpTools["amap-maps"], ...mcpTools["fetch"]];
+    // const foodTools = [...mcpTools["amap-maps"], ...mcpTools["fetch"]];
 
     const transportationSpecialist = createSafeSpecialistAgent(
-        transportTools,
+        // transportTools,
+        [],
         ROUTER_PROMPT
     );
 
     const destinationSpecialist = createSafeSpecialistAgent(
-        destinationTools,
+        // destinationTools,
+        [],
         SPOT_PROMPT
     );
 
-    const foodSpecialist = createSafeSpecialistAgent(foodTools, FOOD_PROMPT);
+    const foodSpecialist = createSafeSpecialistAgent(
+        // foodTools,
+        [], 
+        FOOD_PROMPT);
 
     // 5. Build the graph with the new, clean architecture
     const workflow = new StateGraph<AgentState>({ channels: graphState })

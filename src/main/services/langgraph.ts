@@ -76,18 +76,37 @@ export class LangGraphService {
                 },
             };
 
-            // 流式执行
-            for await (const event of this.graph.stream(initialState, config)) {
-                console.log("Stream event:", event);
+            // 流式执行 - 等待 Promise 解析，使用 "messages" 模式获取更细粒度的流式输出
+            const streamResult = await this.graph.stream(initialState, {
+                ...config,
+                streamMode: "messages" // 使用 messages 模式来捕获流式消息
+            });
+            
+            for await (const event of streamResult) {
+                console.log("Stream event:", JSON.stringify(event, null, 2));
 
-                // 根据事件类型提取内容并流式返回
+                // LangGraph 事件格式: { "节点名": { 状态更新 } }
                 if (event && typeof event === "object") {
-                    const eventData = Object.values(event)[0] as any;
-                    if (eventData?.messages?.length > 0) {
-                        const lastMessage =
-                            eventData.messages[eventData.messages.length - 1];
-                        if (lastMessage?.content) {
-                            yield lastMessage.content;
+                    // 遍历事件中的所有节点更新
+                    for (const [nodeName, nodeUpdate] of Object.entries(event)) {
+                        console.log(`处理节点 ${nodeName} 的更新:`, nodeUpdate);
+                        
+                        const update = nodeUpdate as any;
+                        
+                        // 检查是否有新的消息
+                        if (update?.messages && Array.isArray(update.messages)) {
+                            for (const message of update.messages) {
+                                if (message?.content && typeof message.content === 'string') {
+                                    console.log(`从节点 ${nodeName} 获取内容:`, message.content);
+                                    yield message.content;
+                                }
+                            }
+                        }
+                        
+                        // 如果直接有内容字段
+                        if (update?.content && typeof update.content === 'string') {
+                            console.log(`从节点 ${nodeName} 获取直接内容:`, update.content);
+                            yield update.content;
                         }
                     }
                 }
@@ -98,9 +117,6 @@ export class LangGraphService {
         }
     }
 
-    /**
-     * 检查是否已准备就绪
-     */
     isReady(): boolean {
         return this.isInitialized && this.graph !== null;
     }

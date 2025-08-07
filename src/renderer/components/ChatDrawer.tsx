@@ -10,7 +10,7 @@ import {
     Bot,
     User,
 } from "lucide-react";
-import { createChatAPI, type ChatAPI } from "@lib/chat-api";
+import { createChatAPI, type ChatAPI } from "@/main/ipc/chat-api";
 
 interface SuggestionItem {
     id: string;

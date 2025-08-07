@@ -1,31 +1,3 @@
 {
-	"mcpServers": {
-		"time": {
-			"type": "stdio",
-			"command": "uvx",
-			"args": ["mcp-server-time", "--local-timezone=Asia/Shanghai"]
-		},
-		"fetch": {
-			"type": "stdio",
-			"command": "uvx",
-			"args": ["mcp-server-fetch", "--ignore-robots-txt"]
-		},
-		"12306-mcp": {
-			"type": "stdio",
-			"command": "npx",
-			"args": ["-y", "12306-mcp"]
-		},
-		"variflight": {
-			"type": "stdio",
-			"command": "npx",
-			"args": ["-y", "@variflight-ai/variflight-mcp"],
-			"env": {
-				"X_VARIFLIGHT_KEY": "${VARIFLIGHT_KEY}"
-			}
-		},
-		"amap-maps": {
-			"type": "sse",
-			"url": "https://mcp.amap.com/sse?key=${AMAP_WEB_API}"
-		}
-	}
+	"mcpServers": {}
 }

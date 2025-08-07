@@ -39,12 +39,29 @@ export const createOrchestrator = () => {
 
         const tripContent = JSON.stringify(state.tripPlan, null, 2);
         const systemMessage = new SystemMessage({
-            content: systemPrompt.replace("{trip_plan}", tripContent),
+            // content: systemPrompt.replace("{trip_plan}", tripContent),
+            content: "你现在是一个全能的旅游助手，请你回答用户的问题"
         });
 
-        // Invoke the model with system message and conversation history
-        const result = await model.invoke([systemMessage, ...messages]);
-        const aiMessage = result as AIMessage;
+        // 使用流式处理而不是 invoke
+        const streamResult = await model.stream([systemMessage, ...messages]);
+        
+        let fullContent = "";
+        let aiMessage: AIMessage;
+        
+        // 收集流式响应内容
+        for await (const chunk of streamResult) {
+            if (chunk.content) {
+                fullContent += chunk.content;
+                console.log("Orchestrator streaming chunk:", chunk.content);
+            }
+        }
+        
+        // 创建完整的 AI 消息
+        aiMessage = new AIMessage({
+            content: fullContent,
+        });
+        
         return {
             messages: [aiMessage],
             user_interaction_complete: false,
