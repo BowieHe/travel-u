@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import BrowserViewDrawer from "@components/BrowserPage";
+// import BrowserViewDrawer from "@components/BrowserPage";
 import { ChatDrawer } from "@components/ChatDrawer";
 import AMapComponent from "@components/AMap";
 

@@ -1,3 +1,5 @@
+import { isElectron, envInfo } from "@shared/utils/env-detector";
+
 /**
  * 通用的聊天 API 接口
  * 支持 Web 和 Electron 两种环境
@@ -182,9 +184,9 @@ export class ElectronChatAPI implements ChatAPI {
 
     cleanup(): void {
         if (window.electronAPI) {
-            window.electronAPI.onAIResponseStream(() => {});
-            window.electronAPI.onAIResponseStreamEnd(() => {});
-            window.electronAPI.onAIResponseStreamError(() => {});
+            window.electronAPI.onAIResponseStream(() => { });
+            window.electronAPI.onAIResponseStreamEnd(() => { });
+            window.electronAPI.onAIResponseStreamError(() => { });
         }
         this.messageCallback = undefined;
         this.completeCallback = undefined;
@@ -196,8 +198,9 @@ export class ElectronChatAPI implements ChatAPI {
  * 自动检测环境并返回相应的 API 实例
  */
 export function createChatAPI(): ChatAPI {
-    // 检测是否在 Electron 环境中
-    if (typeof window !== "undefined" && window.electronAPI) {
+    console.log('Environment detection:', envInfo);
+
+    if (isElectron) {
         return new ElectronChatAPI();
     }
 

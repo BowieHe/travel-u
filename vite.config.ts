@@ -4,8 +4,19 @@ import path from "path";
 
 export default defineConfig({
     plugins: [react()],
-    root: ".",
-    publicDir: "public",
+    root: "src/renderer", // 改为使用 renderer 目录作为根目录
+    publicDir: "../../public", // 调整 public 目录路径
+    define: {
+        __VITE_IS_WEB__: JSON.stringify(process.env.VITE_IS_WEB === 'true'),
+    },
+    css: {
+        postcss: {
+            plugins: [
+                require('tailwindcss'),
+                require('autoprefixer'),
+            ],
+        },
+    },
     resolve: {
         alias: {
             "@": path.resolve(__dirname, "src"),
@@ -33,7 +44,10 @@ export default defineConfig({
         },
     },
     build: {
-        outDir: "dist-web",
+        outDir: "../../dist-web", // 调整输出目录路径
         emptyOutDir: true,
+        rollupOptions: {
+            input: "index.html" // 明确指定入口文件
+        }
     },
 });

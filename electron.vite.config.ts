@@ -68,12 +68,19 @@ export default defineConfig({
                 plugins: [tailwindcss()],
             },
         },
+        define: {
+            // 确保环境变量在 Electron renderer 中可用
+            __IS_ELECTRON__: JSON.stringify(true),
+        },
         build: {
             sourcemap: true,
             minify: false,
             rollupOptions: {
                 input: resolve(__dirname, "src/renderer/index.html"),
             },
+        },
+        server: {
+            port: 5173, // 确保和 web dev server 使用不同的端口
         },
     },
 });

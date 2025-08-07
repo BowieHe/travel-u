@@ -1,7 +1,10 @@
 import type { Config } from "tailwindcss";
 
 export default {
-	content: ["./src/renderer/**/*.{html,js,ts,tsx}"],
+	content: [
+		"./src/renderer/**/*.{html,js,ts,tsx}",
+		"./src/**/*.{html,js,ts,tsx}",  // 添加更广泛的路径匹配
+	],
 	theme: {
 		extend: {
 			colors: {
