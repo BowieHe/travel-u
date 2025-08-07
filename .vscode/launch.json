@@ -35,40 +35,10 @@
         {
             "type": "node",
             "request": "launch",
-            "name": "Debug Electron Main (Build First)",
-            "program": "${workspaceFolder}/node_modules/.bin/electron",
+            "name": "Debug Electron Main",
+            "program": "${workspaceFolder}/node_modules/electron/cli.js",
             "args": [
                 "--inspect=9229",
-                "--remote-debugging-port=9222",
-                "${workspaceFolder}/out/main/index.js"
-            ],
-            "cwd": "${workspaceFolder}",
-            "sourceMaps": true,
-            "console": "integratedTerminal",
-            "outputCapture": "std",
-            "skipFiles": [
-                "<node_internals>/**",
-                "${workspaceFolder}/node_modules/**"
-            ],
-            "runtimeArgs": [
-                "--inspect-brk=9229"
-            ],
-            "env": {
-                "NODE_ENV": "development"
-            },
-            "windows": {
-                "program": "${workspaceFolder}/node_modules/electron/dist/electron.exe"
-            },
-            "preLaunchTask": "build:main"
-        },
-        {
-            "type": "node",
-            "request": "launch",
-            "name": "Debug Electron Main (Dev Mode)",
-            "program": "${workspaceFolder}/node_modules/.bin/electron",
-            "args": [
-                "--inspect=9229",
-                "--remote-debugging-port=9222",
                 "."
             ],
             "cwd": "${workspaceFolder}",
@@ -81,9 +51,6 @@
             ],
             "env": {
                 "NODE_ENV": "development"
-            },
-            "windows": {
-                "program": "${workspaceFolder}/node_modules/electron/dist/electron.exe"
             }
         },
         {

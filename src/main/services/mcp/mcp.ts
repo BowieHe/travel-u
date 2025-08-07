@@ -13,7 +13,7 @@ export class McpService {
     private isInitialized = false;
     private initializationPromise: Promise<void> | null = null;
 
-    private constructor() {}
+    private constructor() { }
 
     static getInstance(): McpService {
         if (!McpService.instance) {
@@ -50,10 +50,11 @@ export class McpService {
             ]);
             console.log("环境变量检查:", envStatus);
 
-            const configPath = path.join(
-                __dirname,
-                "../config/mcp-servers.json"
-            );
+            const configPath = EnvUtils.getConfigPath()
+            // const configPath = path.join(
+            //     __dirname,
+            //     "../config/mcp-servers.json"
+            // );
             this.mcpClientManager = await initFromConfig(configPath);
             console.log("MCP Client Manager 初始化成功");
 

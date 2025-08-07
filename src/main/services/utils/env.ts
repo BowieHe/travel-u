@@ -1,3 +1,6 @@
+import * as fs from "fs";
+import * as path from "path";
+
 const ENV_KEYS = {
     NODE_ENV: "NODE_ENV",
     VITE_AMAP_KEY: "VITE_AMAP_KEY",
@@ -62,4 +65,20 @@ export class EnvUtils {
     static isProduction(): boolean {
         return process.env.NODE_ENV === "production";
     }
+
+    static getConfigPath() {
+        // 1. 源码目录
+        const srcPath = path.resolve(process.cwd(), "config/mcp-servers.json");
+        if (fs.existsSync(srcPath)) return srcPath;
+
+        // 2. 打包后目录
+        const outPath = path.resolve(__dirname, "../../config/mcp-servers.json");
+        if (fs.existsSync(outPath)) return outPath;
+
+        throw new Error("未找到 mcp-servers.json 配置文件");
+    }
 }
+
+
+
+

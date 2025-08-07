@@ -8,7 +8,7 @@
         "dev": "dotenv electron-vite dev",
         "dev:web": "concurrently \"vite --config vite.config.ts\" \"yarn dev:api\"",
         "dev:api": "dotenv ts-node -r tsconfig-paths/register src/main/web-server.ts",
-        "build": "electron-vite build",
+        "build": "electron-vite build && cp -r config out/config",
         "build:main": "electron-vite build --main",
         "build:preload": "electron-vite build --preload",
         "build:renderer": "electron-vite build --renderer",
