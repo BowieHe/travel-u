@@ -29,49 +29,7 @@ async function initializeServices() {
     }
 }
 
-// 流式聊天 API
-app.post('/api/chat/stream', async (req, res) => {
-    try {
-        const { message } = req.body;
-
-        if (!message) {
-            return res.status(400).json({ error: '消息不能为空' });
-        }
-
-        // 设置流式响应头
-        res.writeHead(200, {
-            'Content-Type': 'text/plain; charset=utf-8',
-            'Transfer-Encoding': 'chunked',
-            'Cache-Control': 'no-cache',
-            Connection: 'keep-alive',
-        });
-
-        // 确保服务已初始化
-        if (!langGraphService.isReady()) {
-            await initializeServices();
-        }
-
-        // 使用 LangGraph 的流式处理
-        const stream = langGraphService.streamMessage(message);
-
-        for await (const chunk of stream) {
-            // 发送流式数据
-            res.write(chunk);
-        }
-
-        // 结束响应
-        res.end();
-    } catch (error: any) {
-        console.error('流式处理错误:', error);
-
-        if (!res.headersSent) {
-            res.status(500).json({ error: error.message });
-        } else {
-            res.write(`\n错误: ${error.message}`);
-            res.end();
-        }
-    }
-});
+// 已移除旧 /api/chat/stream 接口，统一使用 /api/chat/sse
 
 // SSE 聊天接口（Web 独立服务器）
 app.get('/api/chat/sse', async (req, res) => {
@@ -128,7 +86,7 @@ async function startServer() {
 
     app.listen(port, () => {
         console.log(`🚀 Web 服务器运行在 http://localhost:${port}`);
-        console.log(`📡 聊天 API: http://localhost:${port}/api/chat/stream`);
+        console.log(`📡 聊天 SSE API: http://localhost:${port}/api/chat/sse`);
     });
 }
 
