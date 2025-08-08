@@ -55,7 +55,7 @@ export class LangGraphService {
     async *streamMessage(
         message: string,
         sessionId: string = "default"
-    ): AsyncGenerator<string, void, unknown> {
+    ): AsyncGenerator<string | object, void, unknown> {
         if (!this.isInitialized || !this.graph) {
             yield "LangGraph 未初始化";
             return;
@@ -92,6 +92,16 @@ export class LangGraphService {
                         console.log(`处理节点 ${nodeName} 的更新:`, nodeUpdate);
                         
                         const update = nodeUpdate as any;
+                        
+                        // 检查是否有planTodos更新并发送状态数据
+                        if (update?.planTodos && Array.isArray(update.planTodos)) {
+                            console.log(`从节点 ${nodeName} 获取计划数据:`, update.planTodos);
+                            yield {
+                                type: 'state',
+                                planTodos: update.planTodos,
+                                nodeName: nodeName
+                            };
+                        }
                         
                         // 检查是否有新的消息
                         if (update?.messages && Array.isArray(update.messages)) {

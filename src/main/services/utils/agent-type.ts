@@ -39,6 +39,9 @@ export interface AgentState {
 
     // 用户交互是否完成
     user_interaction_complete?: boolean;
+    
+    // 计划/任务列表
+    planTodos?: PlanTodo[];
 }
 
 export interface UserInteractionState {
@@ -106,4 +109,16 @@ export interface Accommodation {
     checkOut: string;
     cost?: number;
     rating?: number;
+}
+
+export interface PlanTodo {
+    id: string;
+    content: string;
+    status: "pending" | "in_progress" | "completed";
+    priority?: "low" | "medium" | "high";
+    category?: "transportation" | "accommodation" | "activity" | "research" | "booking" | "other";
+    estimatedTime?: number; // minutes
+    deadline?: string;
+    dependencies?: string[]; // array of todo IDs this depends on
+    assignedTo?: string; // which specialist/agent should handle this
 }

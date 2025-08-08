@@ -1,3 +1,9 @@
 {
-	"mcpServers": {}
+	"mcpServers": {
+		"todo-planner": {
+			"type": "stdio",
+			"command": "uvx",
+			"args": ["mcp-server-todo-planner"]
+		}
+	}
 }

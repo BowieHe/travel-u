@@ -40,9 +40,29 @@ router.get('/sse', async (req: Request, res: Response) => {
         }
 
         const stream = langGraphService.streamMessage(message);
+        let finalState: any = null;
+        
         for await (const chunk of stream) {
-            // 逐条发送 JSON 包装的内容
-            res.write(`event: chunk\ndata: ${JSON.stringify({ content: chunk })}\n\n`);
+            // Handle different types of data from the stream
+            if (typeof chunk === 'string') {
+                // Regular content chunk
+                res.write(`event: chunk\ndata: ${JSON.stringify({ content: chunk })}\n\n`);
+            } else if (chunk && typeof chunk === 'object') {
+                // Check if it's state data with plan
+                if (chunk.type === 'state' && chunk.planTodos) {
+                    finalState = chunk;
+                    // Send plan data immediately
+                    res.write(`event: plan\ndata: ${JSON.stringify({ planTodos: chunk.planTodos })}\n\n`);
+                } else if (chunk.content) {
+                    // Content within object
+                    res.write(`event: chunk\ndata: ${JSON.stringify({ content: chunk.content })}\n\n`);
+                }
+            }
+        }
+
+        // Send final state if available
+        if (finalState) {
+            res.write(`event: final_state\ndata: ${JSON.stringify(finalState)}\n\n`);
         }
 
         res.write(`event: done\ndata: {}\n\n`);

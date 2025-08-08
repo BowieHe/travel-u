@@ -1,13 +1,86 @@
 import { DynamicStructuredTool } from "@langchain/core/tools";
 import { Gemini } from "../models/gemini";
 import { z } from "zod";
-import { AgentState } from "../utils/agent-type";
+import { AgentState, PlanTodo } from "../utils/agent-type";
 import {
     AIMessage,
     SystemMessage,
     ToolMessage,
 } from "@langchain/core/messages";
 import { TRAVEL_AGENT_PROMPT } from "../prompts/prompt";
+import { McpService } from "../mcp/mcp";
+
+/**
+ * Creates a todo plan using MCP
+ */
+const createTodoPlanSchema = z.object({
+    userRequest: z.string(),
+    tripDetails: z.object({
+        destination: z.string().optional(),
+        startDate: z.string().optional(),
+        endDate: z.string().optional(),
+        budget: z.number().optional(),
+        travelers: z.number().optional(),
+        preferences: z.array(z.string()).optional(),
+    }).optional(),
+});
+
+type CreateTodoPlanInput = z.infer<typeof createTodoPlanSchema>;
+
+export const createTodoPlanTool = new DynamicStructuredTool({
+    name: "create_todo_plan",
+    description: "Creates a structured todo plan for travel planning based on user request and trip details",
+    schema: createTodoPlanSchema,
+    func: async (input: CreateTodoPlanInput): Promise<string> => {
+        try {
+            const mcpService = McpService.getInstance();
+            await mcpService.initialize();
+            
+            if (!mcpService.isReady()) {
+                throw new Error("MCP Service not ready");
+            }
+
+            const clientManager = mcpService.getClientManager();
+            
+            // Call the todo planner MCP
+            const result = await clientManager.callTool("todo-planner", "create_plan", {
+                userRequest: input.userRequest,
+                tripDetails: input.tripDetails || {},
+                context: "travel_planning"
+            });
+
+            return JSON.stringify(result);
+        } catch (error) {
+            console.error("Error creating todo plan:", error);
+            return JSON.stringify({ 
+                error: error instanceof Error ? error.message : String(error),
+                fallbackPlan: [
+                    {
+                        id: "1",
+                        content: "Research destination information",
+                        status: "pending",
+                        priority: "high",
+                        category: "research"
+                    },
+                    {
+                        id: "2", 
+                        content: "Find and book transportation",
+                        status: "pending",
+                        priority: "high",
+                        category: "transportation"
+                    },
+                    {
+                        id: "3",
+                        content: "Find and book accommodation",
+                        status: "pending", 
+                        priority: "high",
+                        category: "accommodation"
+                    }
+                ]
+            });
+        }
+    },
+});
 
 /**
  * Creates a regular orchestrator node that handles tool calls directly.
@@ -18,19 +91,13 @@ import { TRAVEL_AGENT_PROMPT } from "../prompts/prompt";
  */
 export const createOrchestrator = () => {
     const llm = new Gemini();
-    // const tools = [
-    //     ...externalTools,
-    //     createSubtaskTool,
-    //     generateTaskPromptTool,
-    //     collectUserInfoTool,
-    // ];
-    // const tools = [];
-    const model = llm.llm("gemini-2.5-flash"); //.bindTools(tools);
+    const tools = [createTodoPlanTool];
+    const model = llm.llm("gemini-2.5-flash").bindTools(tools);
 
     const systemPrompt = TRAVEL_AGENT_PROMPT;
 
     // Create a tool map for quick lookup
-    // const toolMap = new Map(tools.map((tool) => [tool.name, tool]));
+    const toolMap = new Map(tools.map((tool) => [tool.name, tool]));
 
     return async (state: AgentState): Promise<Partial<AgentState>> => {
         console.log("---ORCHESTRATOR---");
@@ -39,15 +106,92 @@ export const createOrchestrator = () => {
 
         const tripContent = JSON.stringify(state.tripPlan, null, 2);
         const systemMessage = new SystemMessage({
-            // content: systemPrompt.replace("{trip_plan}", tripContent),
-            content: "你现在是一个全能的旅游助手，请你回答用户的问题"
+            content: "你现在是一个全能的旅游助手。当用户提出旅行需求时，首先使用create_todo_plan工具为他们创建一个详细的计划清单，然后再回答用户的问题。"
         });
 
-        // 使用流式处理而不是 invoke
+        // Use invoke instead of stream for tool calls
+        const aiMessage = await model.invoke([systemMessage, ...messages]);
+        
+        console.log("Orchestrator AI response:", aiMessage.content);
+
+        // Handle tool calls if present
+        if (aiMessage.tool_calls && aiMessage.tool_calls.length > 0) {
+            const toolCall = aiMessage.tool_calls[0];
+            const tool = toolMap.get(toolCall.name);
+
+            if (!tool) {
+                console.error(`Tool ${toolCall.name} not found`);
+                return {
+                    messages: [aiMessage],
+                    errorMessage: `Tool ${toolCall.name} not found`,
+                };
+            }
+
+            try {
+                console.log(
+                    `Orchestrator calling tool: ${toolCall.name}`,
+                    toolCall.args
+                );
+
+                let toolResult: string;
+                
+                if (toolCall.name === "create_todo_plan") {
+                    const args = toolCall.args as CreateTodoPlanInput;
+                    toolResult = await (
+                        tool.func as (
+                            input: CreateTodoPlanInput
+                        ) => Promise<string>
+                    )(args);
+                } else {
+                    console.warn("calling the unexpected tool:", toolCall.name);
+                    toolResult = "";
+                }
+
+                const toolMessage = new ToolMessage({
+                    tool_call_id: toolCall.id ?? "",
+                    content: toolResult,
+                });
+
+                // Parse the plan result and add to state
+                let planTodos: PlanTodo[] = [];
+                try {
+                    const planResult = JSON.parse(toolResult);
+                    if (planResult.fallbackPlan) {
+                        planTodos = planResult.fallbackPlan;
+                    } else if (planResult.plan) {
+                        planTodos = planResult.plan;
+                    } else if (Array.isArray(planResult)) {
+                        planTodos = planResult;
+                    }
+                } catch (parseError) {
+                    console.error("Error parsing plan result:", parseError);
+                }
+
+                console.log("Created plan todos:", planTodos);
+
+                return {
+                    messages: [aiMessage, toolMessage],
+                    planTodos: planTodos,
+                    user_interaction_complete: false,
+                    next: "ask_user",
+                };
+            } catch (error: any) {
+                console.error(`Error calling tool ${toolCall.name}:`, error);
+                const errorMessage = new ToolMessage({
+                    tool_call_id: toolCall.id ?? "",
+                    content: `Error: ${error.message}`,
+                });
+                return {
+                    messages: [aiMessage, errorMessage],
+                    errorMessage: error.message,
+                };
+            }
+        }
+
+        // If no tool calls, proceed with streaming response
         const streamResult = await model.stream([systemMessage, ...messages]);
         
         let fullContent = "";
-        let aiMessage: AIMessage;
         
         // 收集流式响应内容
         for await (const chunk of streamResult) {
@@ -58,12 +202,12 @@ export const createOrchestrator = () => {
         }
         
         // 创建完整的 AI 消息
-        aiMessage = new AIMessage({
+        const finalAiMessage = new AIMessage({
             content: fullContent,
         });
         
         return {
-            messages: [aiMessage],
+            messages: [finalAiMessage],
             user_interaction_complete: false,
             next: "ask_user",
         };
