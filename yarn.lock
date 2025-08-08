@@ -3265,6 +3265,15 @@ __metadata:
   languageName: node
   linkType: hard
 
+"marked@npm:^16.1.2":
+  version: 16.1.2
+  resolution: "marked@npm:16.1.2"
+  bin:
+    marked: bin/marked.js
+  checksum: 10c0/4e5878f1aa89de139bed14835865af20f26527674f41dedf2b33d2f85360298a1a0cc0505c675f072175c86eb30684c7b4e287d18f5958daa26e36bc1308d321
+  languageName: node
+  linkType: hard
+
 "matcher@npm:^3.0.0":
   version: 3.0.0
   resolution: "matcher@npm:3.0.0"
@@ -4739,6 +4748,7 @@ __metadata:
     express: "npm:^5.1.0"
     langchain: "npm:^0.3.29"
     lucide-react: "npm:^0.536.0"
+    marked: "npm:^16.1.2"
     postcss: "npm:^8.5.6"
     react: "npm:^19.1.1"
     react-dom: "npm:^19.1.1"

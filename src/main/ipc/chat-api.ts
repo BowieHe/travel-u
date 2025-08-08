@@ -20,68 +20,63 @@ export class WebChatAPI implements ChatAPI {
     private messageCallback?: (chunk: string) => void;
     private completeCallback?: () => void;
     private errorCallback?: (error: string) => void;
+    private eventSource?: EventSource;
 
     async streamMessage(message: string): Promise<void> {
+        this.closeES();
         try {
-            await this.callAPI(message);
+            // 使用 GET + query 形式便于 SSE
+            const url = `/api/chat/sse?message=${encodeURIComponent(message)}`;
+            this.eventSource = new EventSource(url);
+
+            this.eventSource.addEventListener('chunk', (e: MessageEvent) => {
+                try {
+                    const data = JSON.parse(e.data);
+                    this.messageCallback?.(data.content || '');
+                } catch (err) {
+                    console.warn('解析 chunk 失败', err);
+                }
+            });
+
+            this.eventSource.addEventListener('done', () => {
+                this.completeCallback?.();
+                this.closeES();
+            });
+
+            this.eventSource.addEventListener('error', (e: MessageEvent) => {
+                if (this.errorCallback) {
+                    try {
+                        const data = JSON.parse(e.data);
+                        this.errorCallback(data.error || '未知错误');
+                    } catch {
+                        this.errorCallback('SSE 连接错误');
+                    }
+                }
+                this.closeES();
+            });
         } catch (error: any) {
-            if (this.errorCallback) {
-                this.errorCallback(error.message);
-            } else {
-                // 如果没有设置错误回调，直接抛出异常
-                throw error;
-            }
+            this.errorCallback?.(error.message || 'SSE 初始化失败');
         }
     }
 
-    private async callAPI(message: string): Promise<void> {
-        const response = await fetch('/api/chat/stream', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({ message }),
-        });
-
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-
-        const reader = response.body?.getReader();
-        if (!reader) {
-            throw new Error('No response body');
-        }
-
-        const decoder = new TextDecoder();
-
-        while (true) {
-            const { done, value } = await reader.read();
-
-            if (done) {
-                // 完成回调是可选的
-                this.completeCallback?.();
-                break;
-            }
-
-            const chunk = decoder.decode(value, { stream: true });
-            // messageCallback 在 streamMessage 中已确保存在
-            this.messageCallback!(chunk);
+    private closeES() {
+        if (this.eventSource) {
+            this.eventSource.close();
+            this.eventSource = undefined;
         }
     }
 
     onMessage(callback: (chunk: string) => void): void {
         this.messageCallback = callback;
     }
-
     onComplete(callback: () => void): void {
         this.completeCallback = callback;
     }
-
     onError(callback: (error: string) => void): void {
         this.errorCallback = callback;
     }
-
     cleanup(): void {
+        this.closeES();
         this.messageCallback = undefined;
         this.completeCallback = undefined;
         this.errorCallback = undefined;
@@ -91,65 +86,8 @@ export class WebChatAPI implements ChatAPI {
 /**
  * Electron 环境的 API 实现 - 使用 IPC
  */
-export class ElectronChatAPI implements ChatAPI {
-    private messageCallback?: (chunk: string) => void;
-    private completeCallback?: () => void;
-    private errorCallback?: (error: string) => void;
-
-    async streamMessage(message: string): Promise<void> {
-        if (!window.electronAPI) {
-            throw new Error('Electron API not available');
-        }
-
-        // 清理之前的监听器
-        this.cleanup();
-
-        // 设置新的监听器
-        window.electronAPI.onAIResponseStream((chunk: string) => {
-            if (this.messageCallback) {
-                this.messageCallback(chunk);
-            }
-        });
-
-        window.electronAPI.onAIResponseStreamEnd(() => {
-            if (this.completeCallback) {
-                this.completeCallback();
-            }
-        });
-
-        window.electronAPI.onAIResponseStreamError((error: string) => {
-            if (this.errorCallback) {
-                this.errorCallback(error);
-            }
-        });
-
-        // 发送消息
-        await window.electronAPI.streamMessage(message);
-    }
-
-    onMessage(callback: (chunk: string) => void): void {
-        this.messageCallback = callback;
-    }
-
-    onComplete(callback: () => void): void {
-        this.completeCallback = callback;
-    }
-
-    onError(callback: (error: string) => void): void {
-        this.errorCallback = callback;
-    }
-
-    cleanup(): void {
-        if (window.electronAPI) {
-            window.electronAPI.onAIResponseStream(() => {});
-            window.electronAPI.onAIResponseStreamEnd(() => {});
-            window.electronAPI.onAIResponseStreamError(() => {});
-        }
-        this.messageCallback = undefined;
-        this.completeCallback = undefined;
-        this.errorCallback = undefined;
-    }
-}
+// Electron 渲染进程同样可以直接使用 SSE（无需 IPC 中转），保持接口一致
+export class ElectronChatAPI extends WebChatAPI {}
 
 /**
  * 自动检测环境并返回相应的 API 实例
