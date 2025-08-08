@@ -1,4 +1,4 @@
-import { isElectron, envInfo } from "@shared/utils/env-detector";
+import { isElectron, envInfo } from '@shared/utils/env-detector';
 
 /**
  * 通用的聊天 API 接口
@@ -23,92 +23,49 @@ export class WebChatAPI implements ChatAPI {
 
     async streamMessage(message: string): Promise<void> {
         try {
-            // 首先尝试连接真实的 API
-            if (await this.tryRealAPI(message)) {
-                return;
-            }
-
-            // 如果真实 API 不可用，使用模拟响应
-            await this.simulateResponse(message);
+            await this.callAPI(message);
         } catch (error: any) {
             if (this.errorCallback) {
                 this.errorCallback(error.message);
+            } else {
+                // 如果没有设置错误回调，直接抛出异常
+                throw error;
             }
         }
     }
 
-    private async tryRealAPI(message: string): Promise<boolean> {
-        try {
-            const response = await fetch("/api/chat/stream", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                },
-                body: JSON.stringify({ message }),
-            });
+    private async callAPI(message: string): Promise<void> {
+        const response = await fetch('/api/chat/stream', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ message }),
+        });
 
-            if (!response.ok) {
-                // 如果 API 不存在，返回 false 使用模拟
-                if (response.status === 404) {
-                    return false;
-                }
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-
-            const reader = response.body?.getReader();
-            if (!reader) {
-                throw new Error("No response body");
-            }
-
-            const decoder = new TextDecoder();
-
-            while (true) {
-                const { done, value } = await reader.read();
-
-                if (done) {
-                    if (this.completeCallback) {
-                        this.completeCallback();
-                    }
-                    break;
-                }
-
-                const chunk = decoder.decode(value, { stream: true });
-                if (this.messageCallback) {
-                    this.messageCallback(chunk);
-                }
-            }
-            return true;
-        } catch (error) {
-            // API 不可用，返回 false 使用模拟
-            console.log("真实 API 不可用，使用模拟响应");
-            return false;
-        }
-    }
-
-    private async simulateResponse(message: string): Promise<void> {
-        // 模拟 AI 响应
-        const responses = [
-            "我理解您想要",
-            message.includes("旅行") || message.includes("旅游")
-                ? "规划一次完美的旅行。"
-                : "获得帮助。",
-            "\n\n基于您的需求，我建议：\n",
-            "1. 首先确定您的旅行目的地和时间\n",
-            "2. 制定详细的行程计划\n",
-            "3. 预订合适的住宿和交通\n",
-            "\n请告诉我更多具体信息，我会为您提供更详细的建议。",
-        ];
-
-        for (const response of responses) {
-            if (this.messageCallback) {
-                this.messageCallback(response);
-            }
-            // 模拟流式延迟
-            await new Promise((resolve) => setTimeout(resolve, 200));
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
         }
 
-        if (this.completeCallback) {
-            this.completeCallback();
+        const reader = response.body?.getReader();
+        if (!reader) {
+            throw new Error('No response body');
+        }
+
+        const decoder = new TextDecoder();
+
+        while (true) {
+            const { done, value } = await reader.read();
+
+            if (done) {
+                // 完成回调是可选的
+                this.completeCallback?.();
+                break;
+            }
+
+            const chunk = decoder.decode(value, { stream: true });
+            // messageCallback 在 streamMessage 中已确保存在
+            this.messageCallback!(chunk);
         }
     }
 
@@ -141,7 +98,7 @@ export class ElectronChatAPI implements ChatAPI {
 
     async streamMessage(message: string): Promise<void> {
         if (!window.electronAPI) {
-            throw new Error("Electron API not available");
+            throw new Error('Electron API not available');
         }
 
         // 清理之前的监听器
@@ -184,9 +141,9 @@ export class ElectronChatAPI implements ChatAPI {
 
     cleanup(): void {
         if (window.electronAPI) {
-            window.electronAPI.onAIResponseStream(() => { });
-            window.electronAPI.onAIResponseStreamEnd(() => { });
-            window.electronAPI.onAIResponseStreamError(() => { });
+            window.electronAPI.onAIResponseStream(() => {});
+            window.electronAPI.onAIResponseStreamEnd(() => {});
+            window.electronAPI.onAIResponseStreamError(() => {});
         }
         this.messageCallback = undefined;
         this.completeCallback = undefined;
