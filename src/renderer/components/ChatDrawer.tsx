@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { marked } from 'marked';
 import {
     HelpCircle,
@@ -83,6 +83,7 @@ export const ChatDrawer: React.FC<{
         try {
             let fullResponse = '';
             chatAPI.onMessage((chunk: string) => {
+                console.log('get content from chatAPI.onMessage', chunk);
                 fullResponse += chunk;
                 setMessages((prev) =>
                     prev.map((msg) =>
@@ -269,27 +270,33 @@ export const ChatDrawer: React.FC<{
 
                     {/* 输入区 */}
                     <footer className="mt-auto px-6 pt-3 pb-5">
-                        <div className="flex items-center bg-brand-surface border border-brand-border rounded-[12px] px-3 h-[52px] transition-all focus-within:border-brand-icon focus-within:shadow-[0_0_0_2px_rgba(140,140,106,0.2)]">
-                            <Sparkles size={20} className="text-brand-icon/80" />
-                            <input
-                                type="text"
+                        <div className="flex flex-col bg-brand-surface border border-brand-border rounded-[12px] p-3 h-[104px] transition-all focus-within:border-brand-icon focus-within:shadow-[0_0_0_2px_rgba(140,140,106,0.2)]">
+                            <textarea
                                 value={inputMessage}
                                 onChange={(e) => setInputMessage(e.target.value)}
                                 onKeyDown={handleKeyPress}
                                 placeholder="你想要做什么？"
-                                className="flex-grow bg-transparent outline-none border-none text-[15px] text-brand-icon/70 px-2 placeholder:text-brand-icon/40"
+                                className="flex-grow bg-transparent outline-none border-none text-[15px] text-brand-icon/70 px-2 placeholder:text-brand-icon/40 resize-none"
                             />
-                            <button
-                                onClick={sendMessage}
-                                disabled={inputMessage.trim() === '' || isLoading}
-                                className={`p-0 bg-transparent border-none cursor-pointer text-brand-icon/80 transition-opacity ${
-                                    inputMessage.trim() === '' || isLoading
-                                        ? 'opacity-50 cursor-not-allowed'
-                                        : 'hover:opacity-90'
-                                }`}
-                            >
-                                <Send size={20} />
-                            </button>
+                            <div className="flex items-center justify-between mt-2">
+                                <button
+                                    type="button"
+                                    className="p-0 bg-transparent border-none cursor-pointer text-brand-icon/80 transition-opacity hover:opacity-90"
+                                >
+                                    <Sparkles size={20} />
+                                </button>
+                                <button
+                                    onClick={sendMessage}
+                                    disabled={inputMessage.trim() === '' || isLoading}
+                                    className={`p-0 bg-transparent border-none cursor-pointer text-brand-icon/80 transition-opacity ${
+                                        inputMessage.trim() === '' || isLoading
+                                            ? 'opacity-50 cursor-not-allowed'
+                                            : 'hover:opacity-90'
+                                    }`}
+                                >
+                                    <Send size={20} />
+                                </button>
+                            </div>
                         </div>
                     </footer>
                 </div>
