@@ -1,358 +1,136 @@
-import { Tool } from "@langchain/core/tools";
-import { Gemini } from "../models/gemini";
-import { z } from "zod";
-import { AgentState, PlanTodo } from "../utils/agent-type";
-import {
-    AIMessage,
-    SystemMessage,
-    ToolMessage,
-} from "@langchain/core/messages";
-import { TRAVEL_AGENT_PROMPT } from "../prompts/prompt";
-import { McpService } from "../mcp/mcp";
+import { Gemini } from '../models/gemini';
+import { z } from 'zod';
+import { AgentState, PlanTodo } from '../utils/agent-type';
+import { AIMessage, SystemMessage } from '@langchain/core/messages';
+import { TRAVEL_AGENT_PROMPT } from '../prompts/prompt';
 
-/**
- * Creates a todo plan using MCP
- */
-const createTodoPlanSchema = z.object({
-    userRequest: z.string(),
-    tripDetails: z.any().optional(),
+// =============== 新的编排逻辑 ===============
+// 不再调用外部 todo-planner MCP 工具；改为通过一次“大 meta prompt” 让 LLM 自主决定：
+// 1. 是否需要生成一个计划 (plan) 还是可以直接回答 (direct_answer)
+// 2. 输出统一 JSON，方便解析
+
+// 约定的模型输出 JSON 结构（任意一部分缺失则忽略）：
+// {
+//   "thinking": "可选，模型的内部分析",
+//   "reason": "如果选择 direct_answer，说明为什么不需要计划",
+//   "direct_answer": "如果任务简单或信息不足，直接给出的回答",
+//   "plan": [
+//       {"description": "要做什么", "category": "research|booking|transportation|accommodation|other", "priority": "high|medium|low"}
+//   ]
+// }
+
+const PLAN_JSON_SCHEMA = z.object({
+    thinking: z.string().optional(),
+    reason: z.string().optional(),
+    direct_answer: z.string().optional(),
+    plan: z
+        .array(
+            z.object({
+                description: z.string(),
+                category: z
+                    .enum([
+                        'research',
+                        'booking',
+                        'transportation',
+                        'accommodation',
+                        'activity',
+                        'other',
+                    ])
+                    .optional(),
+                priority: z.enum(['high', 'medium', 'low']).optional(),
+            })
+        )
+        .optional(),
 });
 
-interface CreateTodoPlanInput {
-    userRequest: string;
-    tripDetails?: any;
-}
-
-const createTodoPlanFunc = async (input: CreateTodoPlanInput): Promise<string> => {
+function extractFirstJsonBlock(text: string): any | null {
+    // 尝试提取第一个 JSON 对象
+    const match = text.match(/\{[\s\S]*\}/);
+    if (!match) return null;
     try {
-        const mcpService = McpService.getInstance();
-        await mcpService.initialize();
-        
-        if (!mcpService.isReady()) {
-            throw new Error("MCP Service not ready");
-        }
-
-        const clientManager = mcpService.getClientManager();
-        
-        // Call the todo planner MCP
-        const result = await clientManager.callTool("todo-planner", "create_plan", {
-            userRequest: input.userRequest,
-            tripDetails: input.tripDetails || {},
-            context: "travel_planning"
-        });
-
-        return JSON.stringify(result);
-    } catch (error) {
-        console.error("Error creating todo plan:", error);
-        return JSON.stringify({ 
-            error: error instanceof Error ? error.message : String(error),
-            fallbackPlan: [
-                {
-                    id: "1",
-                    content: "Research destination information",
-                    status: "pending",
-                    priority: "high",
-                    category: "research"
-                },
-                {
-                    id: "2", 
-                    content: "Find and book transportation",
-                    status: "pending",
-                    priority: "high",
-                    category: "transportation"
-                },
-                {
-                    id: "3",
-                    content: "Find and book accommodation",
-                    status: "pending", 
-                    priority: "high",
-                    category: "accommodation"
-                }
-            ]
-        });
-    }
-};
-
-class CreateTodoPlanTool extends Tool {
-    name = "create_todo_plan";
-    description = "Creates a structured todo plan for travel planning based on user request and trip details. Input should be a JSON string with userRequest and optional tripDetails.";
-
-    async _call(input: string): Promise<string> {
-        try {
-            const parsedInput = JSON.parse(input);
-            return createTodoPlanFunc(parsedInput);
-        } catch (error) {
-            return createTodoPlanFunc({ userRequest: input });
-        }
+        return JSON.parse(match[0]);
+    } catch (e) {
+        return null;
     }
 }
 
-export const createTodoPlanTool = new CreateTodoPlanTool();
-
-/**
- * Creates a regular orchestrator node that handles tool calls directly.
- * This replaces the ReAct agent with a more controlled approach.
- *
- * @param tools The list of tools the agent can use, including 'create_subtask'.
- * @returns A node function that can be used in the graph.
- */
+function convertPlanToTodos(
+    plan: Array<{ description: string; category?: string; priority?: string }>
+): PlanTodo[] {
+    return plan.map((step, idx) => ({
+        id: (idx + 1).toString(),
+        content: step.description,
+        status: 'pending',
+        category: (step.category as any) || 'other',
+        priority: (step.priority as any) || 'medium',
+    }));
+}
 export const createOrchestrator = () => {
     const llm = new Gemini();
-    const tools = [createTodoPlanTool];
-    const model = llm.llm("gemini-2.5-flash").bindTools(tools);
+    const model = llm.llm('gemini-2.5-flash'); // 不再绑定工具
 
-    const systemPrompt = TRAVEL_AGENT_PROMPT;
-
-    // Create a tool map for quick lookup
-    const toolMap = new Map(tools.map((tool) => [tool.name, tool]));
+    const metaInstruction = `你是一个专业的旅行智能助手。根据用户的输入决定以下两种路径之一：\n\n1) 如果用户的问题很简单（例如：单一事实查询、翻译、非常短的小问题）或者当前信息不足以制定可靠计划，则直接回答问题，返回 JSON 中的 direct_answer，并给出 reason，plan 为空数组。\n2) 如果用户的需求涉及多步骤、需要研究/预订/比较/行程整理等，请输出一个结构化计划 plan（数组）。不要执行，只规划。\n\n输出严格为 JSON（不要附加额外文本、解释或 Markdown），符合以下模式：\n{\n  "thinking": "(可选) 你的内部分析，30~100字以内",\n  "reason": "(可选) 如果选择 direct_answer，解释为何无需计划",\n  "direct_answer": "(可选) 直接给用户的回复内容",\n  "plan": [ { "description": "需要做的动作", "category": "research|booking|transportation|accommodation|activity|other", "priority": "high|medium|low" } ]\n}\n注意：\n- 二选一：要么给 direct_answer（plan 为空或缺失），要么给非空 plan（此时可以不含 direct_answer）。\n- description 要简洁可执行。\n- 严格输出单个 JSON 对象。`;
 
     return async (state: AgentState): Promise<Partial<AgentState>> => {
-        console.log("---ORCHESTRATOR---");
+        console.log('---ORCHESTRATOR (meta planning)---');
+        const { messages } = state;
 
-        let { messages } = state;
+        // 取最近一条用户消息作为核心需求（可扩展为聚合上下文）
+        const lastHuman = messages[messages.length - 1];
+        const userContent: string = (lastHuman as any)?.content || '';
 
-        const tripContent = JSON.stringify(state.tripPlan, null, 2);
-        const systemMessage = new SystemMessage({
-            content: "你现在是一个全能的旅游助手。当用户提出旅行需求时，首先使用create_todo_plan工具为他们创建一个详细的计划清单，然后再回答用户的问题。"
+        const systemMessage = new SystemMessage({ content: metaInstruction });
+
+        const planningResponse = await model.invoke([systemMessage, ...messages]);
+        const rawText = planningResponse.content?.toString() || '';
+        console.log('Raw planning response:', rawText);
+
+        const jsonObj = extractFirstJsonBlock(rawText);
+        if (!jsonObj) {
+            console.warn('未能解析为 JSON，直接当作回答');
+            const answerMsg = new AIMessage({ content: rawText });
+            return { messages: [answerMsg], next: 'orchestrator' };
+        }
+
+        let parsed: any;
+        try {
+            parsed = PLAN_JSON_SCHEMA.parse(jsonObj);
+        } catch (e) {
+            console.warn('JSON 不符合预期 schema，作为直接回答处理');
+            const answerMsg = new AIMessage({ content: jsonObj.direct_answer || rawText });
+            return { messages: [answerMsg], next: 'orchestrator' };
+        }
+
+        const plan = parsed.plan && Array.isArray(parsed.plan) ? parsed.plan : [];
+
+        if (plan.length === 0 && parsed.direct_answer) {
+            // 直接回答路径
+            const answer = parsed.direct_answer;
+            const reasoning = parsed.reason ? `\n\n(理由: ${parsed.reason})` : '';
+            const answerMsg = new AIMessage({ content: answer + reasoning });
+            return { messages: [answerMsg], next: 'orchestrator' };
+        }
+
+        if (plan.length > 0) {
+            const planTodos = convertPlanToTodos(plan);
+            const planSummary = planTodos.map((t) => `- [ ] ${t.content}`).join('\n');
+            const intro = `已生成一个多步骤计划，共 ${planTodos.length} 步。你可以选择执行、修改或让助手继续。\n\n${planSummary}`;
+            const planMsg = new AIMessage({ content: intro });
+            return {
+                messages: [planMsg],
+                planTodos,
+                next: 'orchestrator',
+            };
+        }
+
+        // 兜底：既没有 plan 也没有 direct_answer
+        const fallbackMsg = new AIMessage({
+            content: '暂时无法制定计划，请补充更多需求细节（例如目的地/天数/偏好）。',
         });
-
-        // Use invoke instead of stream for tool calls
-        const aiMessage = await model.invoke([systemMessage, ...messages]);
-        
-        console.log("Orchestrator AI response:", aiMessage.content);
-
-        // Handle tool calls if present
-        if (aiMessage.tool_calls && aiMessage.tool_calls.length > 0) {
-            const toolCall = aiMessage.tool_calls[0];
-            const tool = toolMap.get(toolCall.name);
-
-            if (!tool) {
-                console.error(`Tool ${toolCall.name} not found`);
-                return {
-                    messages: [aiMessage],
-                    errorMessage: `Tool ${toolCall.name} not found`,
-                };
-            }
-
-            try {
-                console.log(
-                    `Orchestrator calling tool: ${toolCall.name}`,
-                    toolCall.args
-                );
-
-                let toolResult: string;
-                
-                if (toolCall.name === "create_todo_plan") {
-                    const inputData = {
-                        userRequest: toolCall.args.userRequest || JSON.stringify(toolCall.args),
-                        tripDetails: toolCall.args.tripDetails || toolCall.args
-                    };
-                    toolResult = await createTodoPlanFunc(inputData);
-                } else {
-                    console.warn("calling the unexpected tool:", toolCall.name);
-                    toolResult = "";
-                }
-
-                const toolMessage = new ToolMessage({
-                    tool_call_id: toolCall.id ?? "",
-                    content: toolResult,
-                });
-
-                // Parse the plan result and add to state
-                let planTodos: PlanTodo[] = [];
-                try {
-                    const planResult = JSON.parse(toolResult);
-                    if (planResult.fallbackPlan) {
-                        planTodos = planResult.fallbackPlan;
-                    } else if (planResult.plan) {
-                        planTodos = planResult.plan;
-                    } else if (Array.isArray(planResult)) {
-                        planTodos = planResult;
-                    }
-                } catch (parseError) {
-                    console.error("Error parsing plan result:", parseError);
-                }
-
-                console.log("Created plan todos:", planTodos);
-
-                return {
-                    messages: [aiMessage, toolMessage],
-                    planTodos: planTodos,
-                    user_interaction_complete: false,
-                    next: "ask_user",
-                };
-            } catch (error: any) {
-                console.error(`Error calling tool ${toolCall.name}:`, error);
-                const errorMessage = new ToolMessage({
-                    tool_call_id: toolCall.id ?? "",
-                    content: `Error: ${error.message}`,
-                });
-                return {
-                    messages: [aiMessage, errorMessage],
-                    errorMessage: error.message,
-                };
-            }
-        }
-
-        // If no tool calls, proceed with streaming response
-        const streamResult = await model.stream([systemMessage, ...messages]);
-        
-        let fullContent = "";
-        
-        // 收集流式响应内容
-        for await (const chunk of streamResult) {
-            if (chunk.content) {
-                fullContent += chunk.content;
-                console.log("Orchestrator streaming chunk:", chunk.content);
-            }
-        }
-        
-        // 创建完整的 AI 消息
-        const finalAiMessage = new AIMessage({
-            content: fullContent,
-        });
-        
-        return {
-            messages: [finalAiMessage],
-            user_interaction_complete: false,
-            next: "ask_user",
-        };
-
-        /*
-        console.log("Orchestrator AI response:", aiMessage.content);
-
-        // Handle tool calls if present
-        if (aiMessage.tool_calls && aiMessage.tool_calls.length > 0) {
-            const toolCall = aiMessage.tool_calls[0];
-            const tool = toolMap.get(toolCall.name);
-
-            if (!tool) {
-                console.error(`Tool ${toolCall.name} not found`);
-                return {
-                    messages: [aiMessage],
-                    errorMessage: `Tool ${toolCall.name} not found`,
-                };
-            }
-
-            try {
-                console.log(
-                    `Orchestrator calling tool: ${toolCall.name}`,
-                    toolCall.args
-                );
-
-                // For collect_user_info tool, pass the current state
-                let toolResult: string;
-
-                // // 根据工具名称进行类型安全的调用
-                // if (toolCall.name === "create_subtask") {
-                //     const args = toolCall.args as CreateSubtaskInput;
-                //     toolResult = await (
-                //         tool.func as (
-                //             input: CreateSubtaskInput
-                //         ) => Promise<string>
-                //     )(args);
-                // } else if (toolCall.name === "generate_task_prompt") {
-                //     const args = toolCall.args as GenerateTaskPromptInput;
-                //     toolResult = await (
-                //         tool.func as (
-                //             input: GenerateTaskPromptInput
-                //         ) => Promise<string>
-                //     )(args);
-                // } else if (toolCall.name === "collect_user_info") {
-                //     const args = toolCall.args as CollectUserInfoInput;
-                //     toolResult = await (
-                //         tool.func as (
-                //             input: CollectUserInfoInput
-                //         ) => Promise<string>
-                //     )(args);
-                // } else {
-                //     // todo)) might need to be deleted in future
-                //     console.warn("calling the unexpected tool:", toolCall.name);
-                //     toolResult = "";
-                // }
-
-                const toolMessage = new ToolMessage({
-                    tool_call_id: toolCall.id ?? "",
-                    content: toolResult,
-                });
-
-                // Handle different tool types
-                if (toolCall.name === "generate_task_prompt") {
-                    console.log(
-                        "Orchestrator generated task prompt, moving to subtask creation"
-                    );
-                    return {
-                        messages: [aiMessage, toolMessage],
-                        next: "subtask_parser",
-                    };
-                } else if (toolCall.name === "create_subtask") {
-                    console.log(
-                        "Orchestrator created subtask, ready for routing"
-                    );
-                    const subtaskData = JSON.parse(toolResult);
-                    return {
-                        messages: [aiMessage, toolMessage],
-                        subtask: [subtaskData],
-                        next: "router",
-                    };
-                } else if (toolCall.name === "collect_user_info") {
-                    console.log("Orchestrator requesting user interaction");
-                    return {
-                        messages: [aiMessage, toolMessage],
-                        user_interaction_complete: false,
-                        next: "ask_user",
-                    };
-                } else {
-                    console.log(
-                        "Orchestrator called utility tool, continuing conversation"
-                    );
-                    return {
-                        messages: [aiMessage, toolMessage],
-                        next: "orchestrator",
-                    };
-                }
-            } catch (error: any) {
-                console.error(`Error calling tool ${toolCall.name}:`, error);
-                const errorMessage = new ToolMessage({
-                    tool_call_id: toolCall.id ?? "",
-                    content: `Error: ${error.message}`,
-                });
-                return {
-                    messages: [aiMessage, errorMessage],
-                    errorMessage: error.message,
-                };
-            }
-        }
-
-        // If AI responds without tool calls, force user interaction
-        console.log(
-            "WARNING: AI responded without tool calls, forcing user interaction"
-        );
-        console.log("AI response content:", aiMessage.content);
-
-        // Force user interaction by setting the appropriate state
-        return {
-            messages: [aiMessage],
-            user_interaction_complete: false,
-            next: "ask_user",
-        };
-        */
+        return { messages: [fallbackMsg], next: 'orchestrator' };
     };
 };
-
-const createTaskSchema = z.object({
-    topic: z.string(),
-    destination: z.string(),
-    departure_date: z.string(),
-    origin: z.string(),
-});
-
-type CreateSubtaskInput = {
-    topic: string;
-    destination: string;
-    departure_date: string;
-    origin: string;
-};
+// 旧的 ReAct/tool 调用相关代码已移除，保留历史注释以便未来扩展。
 
 // export const createSubtaskTool = new DynamicStructuredTool({
 //     name: "create_subtask",
