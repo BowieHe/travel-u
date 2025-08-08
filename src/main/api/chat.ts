@@ -49,13 +49,14 @@ router.get('/sse', async (req: Request, res: Response) => {
                 res.write(`event: chunk\ndata: ${JSON.stringify({ content: chunk })}\n\n`);
             } else if (chunk && typeof chunk === 'object') {
                 // Check if it's state data with plan
-                if (chunk.type === 'state' && chunk.planTodos) {
-                    finalState = chunk;
+                const chunkObj = chunk as any;
+                if (chunkObj.type === 'state' && chunkObj.planTodos) {
+                    finalState = chunkObj;
                     // Send plan data immediately
-                    res.write(`event: plan\ndata: ${JSON.stringify({ planTodos: chunk.planTodos })}\n\n`);
-                } else if (chunk.content) {
+                    res.write(`event: plan\ndata: ${JSON.stringify({ planTodos: chunkObj.planTodos })}\n\n`);
+                } else if (chunkObj.content) {
                     // Content within object
-                    res.write(`event: chunk\ndata: ${JSON.stringify({ content: chunk.content })}\n\n`);
+                    res.write(`event: chunk\ndata: ${JSON.stringify({ content: chunkObj.content })}\n\n`);
                 }
             }
         }

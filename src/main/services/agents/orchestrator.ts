@@ -1,4 +1,4 @@
-import { DynamicStructuredTool } from "@langchain/core/tools";
+import { Tool } from "@langchain/core/tools";
 import { Gemini } from "../models/gemini";
 import { z } from "zod";
 import { AgentState, PlanTodo } from "../utils/agent-type";
@@ -15,72 +15,79 @@ import { McpService } from "../mcp/mcp";
  */
 const createTodoPlanSchema = z.object({
     userRequest: z.string(),
-    tripDetails: z.object({
-        destination: z.string().optional(),
-        startDate: z.string().optional(),
-        endDate: z.string().optional(),
-        budget: z.number().optional(),
-        travelers: z.number().optional(),
-        preferences: z.array(z.string()).optional(),
-    }).optional(),
+    tripDetails: z.any().optional(),
 });
 
-type CreateTodoPlanInput = z.infer<typeof createTodoPlanSchema>;
+interface CreateTodoPlanInput {
+    userRequest: string;
+    tripDetails?: any;
+}
 
-export const createTodoPlanTool = new DynamicStructuredTool({
-    name: "create_todo_plan",
-    description: "Creates a structured todo plan for travel planning based on user request and trip details",
-    schema: createTodoPlanSchema,
-    func: async (input: CreateTodoPlanInput): Promise<string> => {
-        try {
-            const mcpService = McpService.getInstance();
-            await mcpService.initialize();
-            
-            if (!mcpService.isReady()) {
-                throw new Error("MCP Service not ready");
-            }
-
-            const clientManager = mcpService.getClientManager();
-            
-            // Call the todo planner MCP
-            const result = await clientManager.callTool("todo-planner", "create_plan", {
-                userRequest: input.userRequest,
-                tripDetails: input.tripDetails || {},
-                context: "travel_planning"
-            });
-
-            return JSON.stringify(result);
-        } catch (error) {
-            console.error("Error creating todo plan:", error);
-            return JSON.stringify({ 
-                error: error instanceof Error ? error.message : String(error),
-                fallbackPlan: [
-                    {
-                        id: "1",
-                        content: "Research destination information",
-                        status: "pending",
-                        priority: "high",
-                        category: "research"
-                    },
-                    {
-                        id: "2", 
-                        content: "Find and book transportation",
-                        status: "pending",
-                        priority: "high",
-                        category: "transportation"
-                    },
-                    {
-                        id: "3",
-                        content: "Find and book accommodation",
-                        status: "pending", 
-                        priority: "high",
-                        category: "accommodation"
-                    }
-                ]
-            });
+const createTodoPlanFunc = async (input: CreateTodoPlanInput): Promise<string> => {
+    try {
+        const mcpService = McpService.getInstance();
+        await mcpService.initialize();
+        
+        if (!mcpService.isReady()) {
+            throw new Error("MCP Service not ready");
         }
-    },
-});
+
+        const clientManager = mcpService.getClientManager();
+        
+        // Call the todo planner MCP
+        const result = await clientManager.callTool("todo-planner", "create_plan", {
+            userRequest: input.userRequest,
+            tripDetails: input.tripDetails || {},
+            context: "travel_planning"
+        });
+
+        return JSON.stringify(result);
+    } catch (error) {
+        console.error("Error creating todo plan:", error);
+        return JSON.stringify({ 
+            error: error instanceof Error ? error.message : String(error),
+            fallbackPlan: [
+                {
+                    id: "1",
+                    content: "Research destination information",
+                    status: "pending",
+                    priority: "high",
+                    category: "research"
+                },
+                {
+                    id: "2", 
+                    content: "Find and book transportation",
+                    status: "pending",
+                    priority: "high",
+                    category: "transportation"
+                },
+                {
+                    id: "3",
+                    content: "Find and book accommodation",
+                    status: "pending", 
+                    priority: "high",
+                    category: "accommodation"
+                }
+            ]
+        });
+    }
+};
+
+class CreateTodoPlanTool extends Tool {
+    name = "create_todo_plan";
+    description = "Creates a structured todo plan for travel planning based on user request and trip details. Input should be a JSON string with userRequest and optional tripDetails.";
+
+    async _call(input: string): Promise<string> {
+        try {
+            const parsedInput = JSON.parse(input);
+            return createTodoPlanFunc(parsedInput);
+        } catch (error) {
+            return createTodoPlanFunc({ userRequest: input });
+        }
+    }
+}
+
+export const createTodoPlanTool = new CreateTodoPlanTool();
 
 /**
  * Creates a regular orchestrator node that handles tool calls directly.
@@ -136,12 +143,11 @@ export const createOrchestrator = () => {
                 let toolResult: string;
                 
                 if (toolCall.name === "create_todo_plan") {
-                    const args = toolCall.args as CreateTodoPlanInput;
-                    toolResult = await (
-                        tool.func as (
-                            input: CreateTodoPlanInput
-                        ) => Promise<string>
-                    )(args);
+                    const inputData = {
+                        userRequest: toolCall.args.userRequest || JSON.stringify(toolCall.args),
+                        tripDetails: toolCall.args.tripDetails || toolCall.args
+                    };
+                    toolResult = await createTodoPlanFunc(inputData);
                 } else {
                     console.warn("calling the unexpected tool:", toolCall.name);
                     toolResult = "";
