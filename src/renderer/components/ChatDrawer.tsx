@@ -26,13 +26,31 @@ interface Message {
     isLoading?: boolean;
 }
 
+//todo)) delete later
+const mockMessages: Message[] = [
+    {
+        id: 'a1',
+        content: '你好！',
+        sender: 'user',
+        timestamp: new Date(),
+        isLoading: true,
+    },
+    {
+        id: 'a2',
+        content:
+            '```json\n{\n  "reason": "这是一个简单的问候语，无需复杂的旅行计划。",\n  "direct_answer": "你好！',
+        sender: 'ai',
+        timestamp: new Date(),
+        isLoading: true,
+    },
+];
 // 对话抽屉组件 - 完全基于HTML原型重新设计
 export const ChatDrawer: React.FC<{
     isOpen: boolean;
     onToggle: () => void;
 }> = ({ isOpen, onToggle }) => {
     const [inputMessage, setInputMessage] = useState('');
-    const [messages, setMessages] = useState<Message[]>([]); // 初始为空, 只显示建议
+    const [messages, setMessages] = useState<Message[]>(mockMessages); // 初始为空, 只显示建议
     const [isLoading, setIsLoading] = useState(false);
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -196,7 +214,7 @@ export const ChatDrawer: React.FC<{
                                                 : 'max-w-[85%]'
                                         }`}
                                     >
-                                        <div
+                                        {/* <div
                                             className={`w-8 h-8 mt-1 rounded-full flex items-center justify-center flex-shrink-0 ${
                                                 message.sender === 'ai'
                                                     ? 'bg-gray-100 text-gray-600'
@@ -208,8 +226,49 @@ export const ChatDrawer: React.FC<{
                                             ) : (
                                                 <User size={16} />
                                             )}
-                                        </div>
+                                        </div> */}
                                         <div
+                                            className={`group relative rounded-2xl px-4 py-3 shadow-sm transition-all animate-chat-in ${
+                                                message.sender === 'user'
+                                                    ? 'bg-travel-primary text-white'
+                                                    : 'bg-travel-light/90 border border-brand-divider/70 text-gray-700 dark:bg-brand-darkSurface/70 dark:border-brand-darkBorder dark:text-brand-darkIcon'
+                                            } hover:shadow-md`}
+                                        >
+                                            {message.sender === 'user' ? (
+                                                <div className="text-[14.5px] leading-[1.55] tracking-[0.2px] whitespace-pre-wrap [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
+                                                    <span>
+                                                        {/* {message.content.replace(/\n+$/, '').trim()} */}
+                                                        {message.content}
+                                                    </span>
+                                                </div>
+                                            ) : message.isLoading && message.content == '' ? (
+                                                <div className="flex gap-1 py-1.5 px-0.5">
+                                                    <span className="w-2 h-2 rounded-full bg-gray-400/70 animate-bounce" />
+                                                    <span className="w-2 h-2 rounded-full bg-gray-400/70 animate-bounce [animation-delay:0.12s]" />
+                                                    <span className="w-2 h-2 rounded-full bg-gray-400/70 animate-bounce [animation-delay:0.24s]" />
+                                                </div>
+                                            ) : (
+                                                <div className="markdown-body text-[14.5px] leading-[1.55] tracking-[0.2px] whitespace-pre-wrap [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
+                                                    <div
+                                                        // eslint-disable-next-line react/no-danger
+                                                        dangerouslySetInnerHTML={{
+                                                            __html: marked.parse(
+                                                                message.content
+                                                                    .replace(/\n+$/, '')
+                                                                    .trim()
+                                                            ),
+                                                        }}
+                                                    />
+                                                </div>
+                                            )}
+                                            <span className="absolute -bottom-4 right-1 text-[10px] font-medium tracking-wide italic transition-opacity select-none pointer-events-none text-gray-400 dark:text-brand-darkIcon/60">
+                                                {message.timestamp.toLocaleTimeString([], {
+                                                    hour: '2-digit',
+                                                    minute: '2-digit',
+                                                })}
+                                            </span>
+                                        </div>
+                                        {/* <div
                                             className={`group relative rounded-2xl px-4 py-3 shadow-sm transition-all animate-chat-in ${
                                                 message.sender === 'user'
                                                     ? 'bg-travel-primary text-white'
@@ -260,7 +319,7 @@ export const ChatDrawer: React.FC<{
                                                     minute: '2-digit',
                                                 })}
                                             </span>
-                                        </div>
+                                        </div> */}
                                     </div>
                                 ))}
                                 <div ref={messagesEndRef} />
