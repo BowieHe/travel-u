@@ -1,23 +1,49 @@
 <!DOCTYPE html>
 <html>
+    <head>
+        <meta charset="UTF-8" />
+        <title>Travel-U</title>
+        <meta
+            http-equiv="Content-Security-Policy"
+            content="default-src 'self' 'unsafe-inline' 'unsafe-eval' data: https:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://webapi.amap.com https://restapi.amap.com blob:; style-src 'self' 'unsafe-inline' https:; worker-src 'self' blob:; connect-src 'self' https: wss: blob:;"
+        />
+        <script>
+            (function () {
+                // 优先使用构建期注入的常量（通过 vite.config.ts define）
+                var KEY = window.__VITE_AMAP_KEY__ || '%VITE_AMAP_KEY%';
+                var SEC = window.__VITE_AMAP_SECURITY_CODE__ || '%VITE_AMAP_SECURITY_CODE%';
+                if (KEY && /VITE_AMAP_KEY/.test(KEY)) {
+                    // 说明未被替换，尝试从 <meta name="vite-amap-key"> 读取（可选扩展）
+                    var meta = document.querySelector('meta[name="vite-amap-key"]');
+                    if (meta) KEY = meta.getAttribute('content') || KEY;
+                }
+                if (SEC && /VITE_AMAP_SECURITY_CODE/.test(SEC)) {
+                    var meta2 = document.querySelector('meta[name="vite-amap-security"]');
+                    if (meta2) SEC = meta2.getAttribute('content') || SEC;
+                }
+                if (!KEY || /VITE_AMAP_KEY/.test(KEY)) {
+                    console.warn('[AMap] key 缺失，地图不会加载');
+                    return;
+                }
+                if (SEC && !/VITE_AMAP_SECURITY_CODE/.test(SEC)) {
+                    window._AMapSecurityConfig = { securityJsCode: SEC };
+                }
+                var s = document.createElement('script');
+                s.src =
+                    'https://webapi.amap.com/maps?v=2.0&key=' +
+                    KEY +
+                    '&plugin=AMap.Scale,AMap.ToolBar';
+                s.async = true;
+                s.onerror = function () {
+                    console.error('AMap 脚本加载失败');
+                };
+                document.head.appendChild(s);
+            })();
+        </script>
+    </head>
 
-<head>
-	<meta charset="UTF-8" />
-	<title>Travel-U</title>
-	<meta http-equiv="Content-Security-Policy"
-		content="default-src 'self' 'unsafe-inline' 'unsafe-eval' data: https:; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://webapi.amap.com https://restapi.amap.com blob:; style-src 'self' 'unsafe-inline' https:; worker-src 'self' blob:; connect-src 'self' https: wss: blob:;" />
-	<script type="text/javascript">
-		// 高德地图安全配置
-		window._AMapSecurityConfig = {
-			securityJsCode: "%VITE_AMAP_SECURITY_CODE%",
-		};
-	</script>
-	<script src="https://webapi.amap.com/maps?v=2.0&key=%VITE_AMAP_KEY%&plugin=AMap.Scale,AMap.ToolBar"></script>
-</head>
-
-<body class="m-0 p-0 overflow-hidden">
-	<div id="root"></div>
-	<script type="module" src="./index.tsx"></script>
-</body>
-
+    <body class="m-0 p-0 overflow-hidden">
+        <div id="root"></div>
+        <script type="module" src="./index.tsx"></script>
+    </body>
 </html>

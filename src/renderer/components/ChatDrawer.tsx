@@ -11,7 +11,7 @@ import {
     Bot,
     User,
 } from 'lucide-react';
-import { createChatAPI, type ChatAPI } from '@/main/ipc/chat-api';
+import { createChatAPI } from '@/main/ipc/chat-api';
 
 interface SuggestionItem {
     id: string;
@@ -143,12 +143,12 @@ export const ChatDrawer: React.FC<{
         <>
             {/* 外层抽屉容器 */}
             <div
-                className={`fixed right-0 top-0 h-full w-[480px] transition-transform duration-300 ease-in-out z-50 ${
+                className={`fixed right-0 top-0 h-full w-[min(40%,_640px)] transition-transform duration-300 ease-in-out z-50 ${
                     isOpen ? 'translate-x-0' : 'translate-x-full'
                 }`}
             >
                 {/* 主体盒子 */}
-                <div className="chat-panel m-5 flex flex-col overflow-hidden rounded-2xl bg-brand-surface shadow-[0_8px_28px_rgba(0,0,0,0.08)] font-app backdrop-blur supports-[backdrop-filter]:bg-brand-surface/95">
+                <div className="chat-panel flex flex-col overflow-hidden rounded-2xl bg-brand-surface shadow-[0_8px_28px_rgba(0,0,0,0.08)] font-app backdrop-blur supports-[backdrop-filter]:bg-brand-surface/95">
                     {/* 头部 */}
                     <header className="flex justify-between items-center flex-shrink-0 py-4 px-5">
                         <div className="flex">
@@ -224,21 +224,34 @@ export const ChatDrawer: React.FC<{
                                                     <span className="w-2 h-2 rounded-full bg-gray-400/70 animate-bounce [animation-delay:0.24s]" />
                                                 </div>
                                             ) : (
-                                                <div
-                                                    className="markdown-body text-[14.5px] leading-[1.55] tracking-[0.2px] whitespace-pre-wrap [&>*:first-child]:mt-0"
-                                                    // eslint-disable-next-line react/no-danger
-                                                    dangerouslySetInnerHTML={{
-                                                        __html: marked.parse(message.content, {
-                                                            breaks: true,
-                                                        }),
-                                                    }}
-                                                />
+                                                <div className="markdown-body text-[14.5px] leading-[1.55] tracking-[0.2px] whitespace-pre-wrap [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
+                                                    {message.sender === 'user' ? (
+                                                        // 用户消息直接渲染纯文本，避免 markdown <p> 默认外边距带来的“多一行”视觉效果
+                                                        <span>
+                                                            {message.content
+                                                                .replace(/\n+$/, '')
+                                                                .trim()}
+                                                        </span>
+                                                    ) : (
+                                                        <div
+                                                            // eslint-disable-next-line react/no-danger
+                                                            dangerouslySetInnerHTML={{
+                                                                __html: marked.parse(
+                                                                    message.content
+                                                                        .replace(/\n+$/, '')
+                                                                        .trim()
+                                                                ),
+                                                            }}
+                                                        />
+                                                    )}
+                                                </div>
                                             )}
                                             <span
-                                                className={`absolute -bottom-4 right-1 text-[10px] font-medium tracking-wide italic transition-opacity ${
+                                                className={`absolute -bottom-4 right-1 text-[10px] font-medium tracking-wide italic transition-opacity select-none pointer-events-none
+                                                ${
                                                     message.sender === 'user'
-                                                        ? 'text-white/40 group-hover:text-white/70'
-                                                        : 'text-gray-400 group-hover:text-gray-500 dark:text-brand-darkIcon/50 dark:group-hover:text-brand-darkIcon/70'
+                                                        ? 'text-white/80 drop-shadow-[0_1px_1px_rgba(0,0,0,0.35)]'
+                                                        : 'text-gray-400 dark:text-brand-darkIcon/60'
                                                 }`}
                                             >
                                                 {message.timestamp.toLocaleTimeString([], {

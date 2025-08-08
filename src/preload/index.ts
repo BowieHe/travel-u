@@ -1,7 +1,7 @@
-import { contextBridge, ipcRenderer } from "electron";
-import { ElectronAPI } from "@shared/types/ipc";
-import { McpInitializedEvent } from "@shared/types/mcp";
-import { IPC_CHANNELS } from "@shared/constants/config";
+import { contextBridge, ipcRenderer } from 'electron';
+import { ElectronAPI } from '@shared/types/ipc';
+import { McpInitializedEvent } from '@shared/types/mcp';
+import { IPC_CHANNELS } from '@shared/constants/config';
 
 /**
  * 预加载脚本 - 安全地暴露Electron API到渲染进程
@@ -12,53 +12,27 @@ const electronAPI: ElectronAPI = {
     getVersion: () => process.versions.electron,
     getPlatform: () => process.platform,
 
-    // 流式聊天 - 只保留这一种
-    streamMessage: (message: string) =>
-        ipcRenderer.invoke(IPC_CHANNELS.AI_CHAT_STREAM, message),
-    onAIResponseStream: (callback: (chunk: string) => void) =>
-        ipcRenderer.on(IPC_CHANNELS.AI_RESPONSE_STREAM, (_, chunk) =>
-            callback(chunk)
-        ),
-    onAIResponseStreamEnd: (callback: () => void) =>
-        ipcRenderer.on(IPC_CHANNELS.AI_RESPONSE_STREAM_END, () => callback()),
-    onAIResponseStreamError: (callback: (error: string) => void) =>
-        ipcRenderer.on(IPC_CHANNELS.AI_RESPONSE_STREAM_ERROR, (_, error) =>
-            callback(error)
-        ),
-
-    // 会话管理
-    resetSession: (sessionId?: string) =>
-        ipcRenderer.invoke(IPC_CHANNELS.AI_RESET_SESSION, sessionId),
+    // （已移除聊天 IPC，前端直接通过 SSE 调用后端）
 
     // MCP 状态
     getMcpStatus: () => ipcRenderer.invoke(IPC_CHANNELS.GET_MCP_STATUS),
     onMcpInitialized: (callback: (status: McpInitializedEvent) => void) =>
-        ipcRenderer.on(IPC_CHANNELS.MCP_INITIALIZED, (_, status) =>
-            callback(status)
-        ),
+        ipcRenderer.on(IPC_CHANNELS.MCP_INITIALIZED, (_, status) => callback(status)),
 
     // 地图配置
     getMapConfig: () => ({
-        amapKey: process.env.AMAP_WEB_API || "YOUR_AMAP_KEY_HERE",
+        amapKey: process.env.AMAP_WEB_API || 'YOUR_AMAP_KEY_HERE',
     }),
 
     // BrowserView 控制
     toggleBrowserView: (isOpen: boolean) =>
         ipcRenderer.invoke(IPC_CHANNELS.TOGGLE_BROWSER_VIEW, isOpen),
     onBrowserViewLoading: (callback: (isLoading: boolean) => void) =>
-        ipcRenderer.on(IPC_CHANNELS.BROWSER_VIEW_LOADING, (_, isLoading) =>
-            callback(isLoading)
-        ),
+        ipcRenderer.on(IPC_CHANNELS.BROWSER_VIEW_LOADING, (_, isLoading) => callback(isLoading)),
     onBrowserViewError: (
-        callback: (error: {
-            errorCode: number;
-            errorDescription: string;
-        }) => void
-    ) =>
-        ipcRenderer.on(IPC_CHANNELS.BROWSER_VIEW_ERROR, (_, error) =>
-            callback(error)
-        ),
+        callback: (error: { errorCode: number; errorDescription: string }) => void
+    ) => ipcRenderer.on(IPC_CHANNELS.BROWSER_VIEW_ERROR, (_, error) => callback(error)),
 };
 
 // 安全地暴露API到渲染进程
-contextBridge.exposeInMainWorld("electronAPI", electronAPI);
+contextBridge.exposeInMainWorld('electronAPI', electronAPI);

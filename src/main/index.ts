@@ -1,15 +1,15 @@
-import { app, BrowserWindow } from "electron";
-import * as dotenv from "dotenv";
-import * as path from "path";
-import { createWindow, cleanupWindow } from "./window";
-import { McpService } from "@services/mcp/mcp";
-import { ChatIpcHandler } from "./ipc/chat";
+import { app, BrowserWindow } from 'electron';
+import * as dotenv from 'dotenv';
+import * as path from 'path';
+import { createWindow, cleanupWindow } from './window';
+import { McpService } from '@services/mcp/mcp';
+import appServer from './web-server'; // 启动内嵌 express (web-server.ts 已在其模块底部启动)
 
 // 加载环境变量
-dotenv.config({ path: path.join(__dirname, "../../.env") });
+dotenv.config({ path: path.join(__dirname, '../../.env') });
 
 let mainWindow: BrowserWindow;
-let chatIpcHandler: ChatIpcHandler;
+// 已移除 ChatIpcHandler，统一使用 SSE HTTP 通道
 
 /**
  * 应用程序入口点
@@ -17,15 +17,12 @@ let chatIpcHandler: ChatIpcHandler;
 async function main() {
     await app.whenReady();
 
-    // 1. 初始化 IPC 处理器
-    chatIpcHandler = new ChatIpcHandler();
-
-    // 2. 立即创建窗口，不等待MCP客户端
+    // 1. 立即创建窗口（SSE 直接访问内嵌 web server）
     mainWindow = createWindow();
 
-    // 3. 在后台异步初始化 MCP Client（不阻塞界面）
+    // 2. 后台异步初始化 MCP Client（不阻塞界面）
     initializeMcpClient().catch((error) => {
-        console.error("后台初始化 MCP Client 失败:", error);
+        console.error('后台初始化 MCP Client 失败:', error);
     });
 }
 
@@ -47,7 +44,7 @@ async function initializeMcpClient(): Promise<void> {
             // });
         }
     } catch (error) {
-        console.error("MCP Client Manager 初始化失败:", error);
+        console.error('MCP Client Manager 初始化失败:', error);
 
         // // 通知渲染进程MCP初始化失败
         if (mainWindow && !mainWindow.isDestroyed()) {
@@ -62,7 +59,7 @@ async function initializeMcpClient(): Promise<void> {
 /**
  * 应用程序事件处理
  */
-app.on("window-all-closed", () => {
+app.on('window-all-closed', () => {
     // 清理窗口资源
     if (mainWindow) {
         cleanupWindow(mainWindow);
@@ -72,26 +69,23 @@ app.on("window-all-closed", () => {
     const mcpService = McpService.getInstance();
     mcpService.shutdown().catch(console.error);
 
-    if (process.platform !== "darwin") {
+    if (process.platform !== 'darwin') {
         app.quit();
     }
 });
 
-app.on("activate", () => {
+app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
         mainWindow = createWindow();
     }
 });
 
-app.on("before-quit", async () => {
+app.on('before-quit', async () => {
     if (mainWindow) {
         cleanupWindow(mainWindow);
     }
 
-    // 清理 IPC 处理器
-    if (chatIpcHandler) {
-        chatIpcHandler.cleanup();
-    }
+    // 无 IPC 聊天需要清理
 
     // 清理 MCP Client
     const mcpService = McpService.getInstance();
