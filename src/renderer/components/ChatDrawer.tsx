@@ -158,6 +158,22 @@ export const ChatDrawer: React.FC<{
         }
     };
 
+    const parseMessageContent = (content: string) => {
+        try {
+            const parsed = JSON.parse(content);
+            if (parsed.reason || parsed.direct_answer) {
+                return {
+                    reason: parsed.reason || '',
+                    directAnswer: parsed.direct_answer || '',
+                };
+            }
+        } catch (error) {
+            // 如果不是 JSON 格式，直接返回原始内容
+            return { reason: '', directAnswer: content };
+        }
+        return { reason: '', directAnswer: content };
+    };
+
     return (
         <>
             {/* 外层抽屉容器 */}
@@ -205,123 +221,44 @@ export const ChatDrawer: React.FC<{
                             </div>
                         ) : (
                             <div className="space-y-5 py-5">
-                                {messages.map((message) => (
-                                    <div
-                                        key={message.id}
-                                        className={`flex gap-3 ${
-                                            message.sender === 'user'
-                                                ? 'ml-auto flex-row-reverse max-w-[80%]'
-                                                : 'max-w-[85%]'
-                                        }`}
-                                    >
-                                        {/* <div
-                                            className={`w-8 h-8 mt-1 rounded-full flex items-center justify-center flex-shrink-0 ${
-                                                message.sender === 'ai'
-                                                    ? 'bg-gray-100 text-gray-600'
-                                                    : 'bg-blue-500 text-white'
+                                {messages.map((message) => {
+                                    const { reason, directAnswer } = parseMessageContent(
+                                        message.content
+                                    );
+                                    return (
+                                        <div
+                                            key={message.id}
+                                            className={`flex gap-3 ${
+                                                message.sender === 'user'
+                                                    ? 'ml-auto flex-row-reverse max-w-[80%]'
+                                                    : 'max-w-[85%]'
                                             }`}
                                         >
-                                            {message.sender === 'ai' ? (
-                                                <Bot size={16} />
-                                            ) : (
-                                                <User size={16} />
-                                            )}
-                                        </div> */}
-                                        <div
-                                            className={`group relative rounded-2xl px-4 py-3 shadow-sm transition-all animate-chat-in ${
-                                                message.sender === 'user'
-                                                    ? 'bg-travel-primary text-white'
-                                                    : 'bg-travel-light/90 border border-brand-divider/70 text-gray-700 dark:bg-brand-darkSurface/70 dark:border-brand-darkBorder dark:text-brand-darkIcon'
-                                            } hover:shadow-md`}
-                                        >
-                                            {message.sender === 'user' ? (
-                                                <div className="text-[14.5px] leading-[1.55] tracking-[0.2px] whitespace-pre-wrap [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
-                                                    <span>
-                                                        {/* {message.content.replace(/\n+$/, '').trim()} */}
-                                                        {message.content}
-                                                    </span>
-                                                </div>
-                                            ) : message.isLoading && message.content == '' ? (
-                                                <div className="flex gap-1 py-1.5 px-0.5">
-                                                    <span className="w-2 h-2 rounded-full bg-gray-400/70 animate-bounce" />
-                                                    <span className="w-2 h-2 rounded-full bg-gray-400/70 animate-bounce [animation-delay:0.12s]" />
-                                                    <span className="w-2 h-2 rounded-full bg-gray-400/70 animate-bounce [animation-delay:0.24s]" />
-                                                </div>
-                                            ) : (
-                                                <div className="markdown-body text-[14.5px] leading-[1.55] tracking-[0.2px] whitespace-pre-wrap [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
-                                                    <div
-                                                        // eslint-disable-next-line react/no-danger
-                                                        dangerouslySetInnerHTML={{
-                                                            __html: marked.parse(
-                                                                message.content
-                                                                    .replace(/\n+$/, '')
-                                                                    .trim()
-                                                            ),
-                                                        }}
-                                                    />
-                                                </div>
-                                            )}
-                                            <span className="absolute -bottom-4 right-1 text-[10px] font-medium tracking-wide italic transition-opacity select-none pointer-events-none text-gray-400 dark:text-brand-darkIcon/60">
-                                                {message.timestamp.toLocaleTimeString([], {
-                                                    hour: '2-digit',
-                                                    minute: '2-digit',
-                                                })}
-                                            </span>
-                                        </div>
-                                        {/* <div
-                                            className={`group relative rounded-2xl px-4 py-3 shadow-sm transition-all animate-chat-in ${
-                                                message.sender === 'user'
-                                                    ? 'bg-travel-primary text-white'
-                                                    : 'bg-travel-light/90 border border-brand-divider/70 text-gray-700 dark:bg-brand-darkSurface/70 dark:border-brand-darkBorder dark:text-brand-darkIcon'
-                                            } hover:shadow-md`}
-                                        >
-                                            {message.isLoading &&
-                                            message.sender === 'ai' &&
-                                            message.content === '' ? (
-                                                <div className="flex gap-1 py-1.5 px-0.5">
-                                                    <span className="w-2 h-2 rounded-full bg-gray-400/70 animate-bounce" />
-                                                    <span className="w-2 h-2 rounded-full bg-gray-400/70 animate-bounce [animation-delay:0.12s]" />
-                                                    <span className="w-2 h-2 rounded-full bg-gray-400/70 animate-bounce [animation-delay:0.24s]" />
-                                                </div>
-                                            ) : (
-                                                <div className="markdown-body text-[14.5px] leading-[1.55] tracking-[0.2px] whitespace-pre-wrap [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
-                                                    {message.sender === 'user' ? (
-                                                        // 用户消息直接渲染纯文本，避免 markdown <p> 默认外边距带来的“多一行”视觉效果
-                                                        <span>
-                                                            {message.content
-                                                                .replace(/\n+$/, '')
-                                                                .trim()}
-                                                        </span>
-                                                    ) : (
-                                                        <div
-                                                            // eslint-disable-next-line react/no-danger
-                                                            dangerouslySetInnerHTML={{
-                                                                __html: marked.parse(
-                                                                    message.content
-                                                                        .replace(/\n+$/, '')
-                                                                        .trim()
-                                                                ),
-                                                            }}
-                                                        />
-                                                    )}
-                                                </div>
-                                            )}
-                                            <span
-                                                className={`absolute -bottom-4 right-1 text-[10px] font-medium tracking-wide italic transition-opacity select-none pointer-events-none
-                                                ${
+                                            <div
+                                                className={`group relative rounded-2xl px-4 py-3 shadow-sm transition-all animate-chat-in ${
                                                     message.sender === 'user'
-                                                        ? 'text-white/80 drop-shadow-[0_1px_1px_rgba(0,0,0,0.35)]'
-                                                        : 'text-gray-400 dark:text-brand-darkIcon/60'
-                                                }`}
+                                                        ? 'bg-travel-primary text-white'
+                                                        : 'bg-travel-light/90 border border-brand-divider/70 text-gray-700 dark:bg-brand-darkSurface/70 dark:border-brand-darkBorder dark:text-brand-darkIcon'
+                                                } hover:shadow-md`}
                                             >
-                                                {message.timestamp.toLocaleTimeString([], {
-                                                    hour: '2-digit',
-                                                    minute: '2-digit',
-                                                })}
-                                            </span>
-                                        </div> */}
-                                    </div>
-                                ))}
+                                                {reason && (
+                                                    <div className="text-sm text-gray-500 mb-2">
+                                                        <strong>思考:</strong> {reason}
+                                                    </div>
+                                                )}
+                                                <div className="markdown-body text-[14.5px] leading-[1.55] tracking-[0.2px] whitespace-pre-wrap [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
+                                                    {directAnswer}
+                                                </div>
+                                                <span className="absolute -bottom-4 right-1 text-[10px] font-medium tracking-wide italic transition-opacity select-none pointer-events-none text-gray-400 dark:text-brand-darkIcon/60">
+                                                    {message.timestamp.toLocaleTimeString([], {
+                                                        hour: '2-digit',
+                                                        minute: '2-digit',
+                                                    })}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
                                 <div ref={messagesEndRef} />
                             </div>
                         )}
