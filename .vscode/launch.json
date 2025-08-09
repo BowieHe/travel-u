@@ -4,137 +4,32 @@
         {
             "type": "node",
             "request": "launch",
-            "name": "Debug Web API Server",
+            "name": "Debug API (ts-node)",
             "program": "${workspaceFolder}/src/main/web-server.ts",
-            "outFiles": ["${workspaceFolder}/out/**/*.js"],
+            "runtimeExecutable": "node",
             "runtimeArgs": [
                 "-r",
-                "ts-node/register"
+                "dotenv/config",
+                "-r",
+                "ts-node/register",
+                "-r",
+                "tsconfig-paths/register"
             ],
+            "cwd": "${workspaceFolder}",
             "env": {
                 "NODE_ENV": "development",
-                "PORT": "3001"
+                "VITE_IS_WEB": "true"
             },
             "sourceMaps": true,
             "console": "integratedTerminal",
-            "outputCapture": "std",
-            "skipFiles": [
-                "<node_internals>/**",
-                "${workspaceFolder}/node_modules/**"
-            ]
-        },
-        {
-            "type": "chrome",
-            "request": "launch",
-            "name": "Debug Web Frontend (Chrome)",
-            "url": "http://localhost:3000",
-            "webRoot": "${workspaceFolder}/src/renderer",
-            "sourceMaps": true,
-            "userDataDir": false
-        },
-        {
-            "type": "node",
-            "request": "launch",
-            "name": "Debug Electron Main",
-            "program": "${workspaceFolder}/node_modules/electron/cli.js",
-            "args": [
-                "--inspect=9229",
-                "."
-            ],
-            "cwd": "${workspaceFolder}",
-            "sourceMaps": true,
-            "console": "integratedTerminal",
-            "outputCapture": "std",
-            "skipFiles": [
-                "<node_internals>/**",
-                "${workspaceFolder}/node_modules/**"
-            ],
-            "env": {
-                "NODE_ENV": "development"
-            }
-        },
-        {
-            "type": "node",
-            "request": "attach",
-            "name": "Attach to Electron Main Process",
-            "port": 9229,
-            "address": "localhost",
-            "localRoot": "${workspaceFolder}",
-            "remoteRoot": "${workspaceFolder}",
-            "sourceMaps": true,
-            "skipFiles": [
-                "<node_internals>/**",
-                "${workspaceFolder}/node_modules/**"
-            ]
-        },
-        {
-            "type": "chrome",
-            "request": "attach",
-            "name": "Attach to Electron Renderer",
-            "port": 9222,
-            "webRoot": "${workspaceFolder}/src/renderer",
-            "sourceMaps": true
-        },
-        {
-            "type": "node",
-            "request": "launch",
-            "name": "Debug Node.js Script",
-            "program": "${file}",
-            "console": "integratedTerminal",
-            "sourceMaps": true,
-            "skipFiles": [
-                "<node_internals>/**",
-                "${workspaceFolder}/node_modules/**"
-            ],
-            "runtimeArgs": [
-                "-r",
-                "ts-node/register"
-            ]
-        },
-        {
-            "type": "node",
-            "request": "launch",
-            "name": "Debug Tests",
-            "program": "${workspaceFolder}/node_modules/.bin/vitest",
-            "args": [
-                "run",
-                "--reporter=verbose"
-            ],
-            "console": "integratedTerminal",
-            "sourceMaps": true,
-            "skipFiles": [
-                "<node_internals>/**",
-                "${workspaceFolder}/node_modules/**"
-            ],
-            "env": {
-                "NODE_ENV": "test"
-            }
+            "skipFiles": ["<node_internals>/**"]
         }
     ],
     "compounds": [
         {
-            "name": "Debug Web Full Stack",
-            "configurations": [
-                "Debug Web API Server",
-                "Debug Web Frontend (Chrome)"
-            ],
-            "stopAll": true,
-            "presentation": {
-                "group": "web",
-                "order": 1
-            }
-        },
-        {
-            "name": "Debug Electron Full Stack",
-            "configurations": [
-                "Debug Electron Main (Dev Mode)",
-                "Attach to Electron Renderer"
-            ],
-            "stopAll": true,
-            "presentation": {
-                "group": "electron",
-                "order": 2
-            }
+            "name": "Debug Full Stack (Web)",
+            "configurations": ["Debug API (ts-node)"],
+            "preLaunchTask": "Start Vite (Web)"
         }
     ]
 }

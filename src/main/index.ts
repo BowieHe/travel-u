@@ -2,7 +2,7 @@ import { app, BrowserWindow } from 'electron';
 import * as dotenv from 'dotenv';
 import * as path from 'path';
 import { createWindow, cleanupWindow } from './window';
-import { McpService } from '@services/mcp/mcp';
+import { McpService } from './services/mcp/mcp';
 import appServer from './web-server'; // 启动内嵌 express (web-server.ts 已在其模块底部启动)
 
 // 加载环境变量
