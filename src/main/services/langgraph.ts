@@ -12,7 +12,7 @@ export class LangGraphService {
     private isInitialized = false;
     private initializationPromise: Promise<void> | null = null;
 
-    private constructor() {}
+    private constructor() { }
 
     static getInstance(): LangGraphService {
         if (!LangGraphService.instance) {
@@ -55,76 +55,65 @@ export class LangGraphService {
     async *streamMessage(
         message: string,
         sessionId: string = "default"
-    ): AsyncGenerator<string | object, void, unknown> {
+    ): AsyncGenerator<string, void, unknown> {
         if (!this.isInitialized || !this.graph) {
-            yield "LangGraph 未初始化";
+            yield JSON.stringify({ error: "NOT_INITIALIZED" });
             return;
         }
+        console.log(`流式处理用户消息(统一聚合): ${message}`);
+        const initialState: Partial<AgentState> = {
+            messages: [new HumanMessage(message)],
+            tripPlan: {},
+            user_interaction_complete: true,
+        };
+        const config = { configurable: { thread_id: sessionId } };
 
+        let finalJsonCandidate: string | null = null;
         try {
-            console.log(`流式处理用户消息: ${message}`);
-
-            const initialState: Partial<AgentState> = {
-                messages: [new HumanMessage(message)],
-                tripPlan: {},
-                user_interaction_complete: true,
-            };
-
-            const config = {
-                configurable: {
-                    thread_id: sessionId,
-                },
-            };
-
-            // 流式执行 - 等待 Promise 解析，使用 "messages" 模式获取更细粒度的流式输出
             const streamResult = await this.graph.stream(initialState, {
                 ...config,
-                streamMode: "messages" // 使用 messages 模式来捕获流式消息
+                streamMode: "messages",
             });
-            
             for await (const event of streamResult) {
-                console.log("Stream event:", JSON.stringify(event, null, 2));
-
-                // LangGraph 事件格式: { "节点名": { 状态更新 } }
                 if (event && typeof event === "object") {
-                    // 遍历事件中的所有节点更新
-                    for (const [nodeName, nodeUpdate] of Object.entries(event)) {
-                        console.log(`处理节点 ${nodeName} 的更新:`, nodeUpdate);
-                        
+                    for (const [, nodeUpdate] of Object.entries(event)) {
                         const update = nodeUpdate as any;
-                        
-                        // 检查是否有planTodos更新并发送状态数据
-                        if (update?.planTodos && Array.isArray(update.planTodos)) {
-                            console.log(`从节点 ${nodeName} 获取计划数据:`, update.planTodos);
-                            yield {
-                                type: 'state',
-                                planTodos: update.planTodos,
-                                nodeName: nodeName
-                            };
-                        }
-                        
-                        // 检查是否有新的消息
                         if (update?.messages && Array.isArray(update.messages)) {
-                            for (const message of update.messages) {
-                                if (message?.content && typeof message.content === 'string') {
-                                    console.log(`从节点 ${nodeName} 获取内容:`, message.content);
-                                    yield message.content;
+                            for (const m of update.messages) {
+                                if (m?.content && typeof m.content === "string") {
+                                    // 只保留最新一条（期望 orchestrator 已输出规范 JSON）
+                                    finalJsonCandidate = m.content;
                                 }
                             }
-                        }
-                        
-                        // 如果直接有内容字段
-                        if (update?.content && typeof update.content === 'string') {
-                            console.log(`从节点 ${nodeName} 获取直接内容:`, update.content);
-                            yield update.content;
+                        } else if (update?.content && typeof update.content === "string") {
+                            finalJsonCandidate = update.content;
                         }
                     }
                 }
             }
-        } catch (error: any) {
-            console.error("流式处理消息时出错:", error);
-            yield `流式处理错误: ${error.message}`;
+        } catch (err: any) {
+            console.error("执行图时异常:", err);
+            yield JSON.stringify({ error: "EXECUTION_ERROR", message: err.message });
+            return;
         }
+
+        if (!finalJsonCandidate) {
+            console.warn("未捕获到 orchestrator 输出，返回降级 JSON");
+            yield JSON.stringify({ direct_answer: "暂无响应" });
+            return;
+        }
+
+        // 尝试校验是否为 JSON；若不是则包装为 direct_answer
+        let parsed: any;
+        try {
+            parsed = JSON.parse(finalJsonCandidate);
+        } catch {
+            yield JSON.stringify({ direct_answer: finalJsonCandidate });
+            return;
+        }
+
+        // 这里不强行重写结构，只原样返回（假设 orchestrator 已保证符合 PLAN_JSON_SCHEMA）
+        yield JSON.stringify(parsed);
     }
 
     isReady(): boolean {

@@ -38,7 +38,7 @@ const mockMessages: Message[] = [
     {
         id: 'a2',
         content:
-            '```json\n{\n  "reason": "这是一个简单的问候语，无需复杂的旅行计划。",\n  "direct_answer": "你好！',
+            '{"thinking":"用户只是打招呼，可以直接回复，无需复杂规划。","direct_answer":"您好！我是您的旅行助手。有什么可以帮助您的吗？","plan":[]}',
         sender: 'ai',
         timestamp: new Date(),
         isLoading: true,
@@ -161,17 +161,52 @@ export const ChatDrawer: React.FC<{
     const parseMessageContent = (content: string) => {
         try {
             const parsed = JSON.parse(content);
-            if (parsed.reason || parsed.direct_answer) {
+            if (typeof parsed === 'object' && parsed) {
                 return {
-                    reason: parsed.reason || '',
+                    thinking: parsed.thinking || '',
                     directAnswer: parsed.direct_answer || '',
+                    plan: Array.isArray(parsed.plan) ? parsed.plan : [],
+                    raw: parsed,
                 };
             }
         } catch (error) {
-            // 如果不是 JSON 格式，直接返回原始内容
-            return { reason: '', directAnswer: content };
+            return { thinking: '', directAnswer: content, plan: [], raw: null };
         }
-        return { reason: '', directAnswer: content };
+        return { thinking: '', directAnswer: content, plan: [], raw: null };
+    };
+
+    const PlanBlock: React.FC<{ plan: any[] }> = ({ plan }) => {
+        if (!plan || plan.length === 0) return null;
+        return (
+            <div className="mt-3 space-y-2">
+                <div className="text-xs font-medium tracking-wide text-gray-500 uppercase">
+                    计划
+                </div>
+                <ul className="space-y-1">
+                    {plan.map((item, idx) => (
+                        <li
+                            key={idx}
+                            className="flex items-start gap-2 rounded-lg bg-white/60 dark:bg-white/10 border border-brand-divider/50 px-2 py-1.5 text-[13px] leading-snug backdrop-blur-sm"
+                        >
+                            <input
+                                type="checkbox"
+                                className="mt-0.5 accent-travel-primary cursor-pointer"
+                                disabled
+                            />
+                            <div className="flex-1 min-w-0">
+                                <div className="truncate font-medium text-gray-700 dark:text-gray-200">
+                                    {item.description || '未提供描述'}
+                                </div>
+                                <div className="text-[11px] text-gray-400 mt-0.5 flex gap-3">
+                                    {item.category && <span>分类: {item.category}</span>}
+                                    {item.priority && <span>优先级: {item.priority}</span>}
+                                </div>
+                            </div>
+                        </li>
+                    ))}
+                </ul>
+            </div>
+        );
     };
 
     return (
@@ -222,7 +257,7 @@ export const ChatDrawer: React.FC<{
                         ) : (
                             <div className="space-y-5 py-5">
                                 {messages.map((message) => {
-                                    const { reason, directAnswer } = parseMessageContent(
+                                    const { thinking, directAnswer, plan } = parseMessageContent(
                                         message.content
                                     );
                                     return (
@@ -241,14 +276,20 @@ export const ChatDrawer: React.FC<{
                                                         : 'bg-travel-light/90 border border-brand-divider/70 text-gray-700 dark:bg-brand-darkSurface/70 dark:border-brand-darkBorder dark:text-brand-darkIcon'
                                                 } hover:shadow-md`}
                                             >
-                                                {reason && (
-                                                    <div className="text-sm text-gray-500 mb-2">
-                                                        <strong>思考:</strong> {reason}
+                                                {thinking && (
+                                                    <div className="text-xs text-gray-500 mb-2 space-y-1 font-semibold">
+                                                        <strong className="font-semibold">
+                                                            思考:
+                                                        </strong>{' '}
+                                                        {thinking}
                                                     </div>
                                                 )}
-                                                <div className="markdown-body text-[14.5px] leading-[1.55] tracking-[0.2px] whitespace-pre-wrap [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
-                                                    {directAnswer}
-                                                </div>
+                                                {directAnswer && (
+                                                    <div className="markdown-body text-[14.5px] leading-[1.55] tracking-[0.2px] whitespace-pre-wrap [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
+                                                        {directAnswer}
+                                                    </div>
+                                                )}
+                                                <PlanBlock plan={plan} />
                                                 <span className="absolute -bottom-4 right-1 text-[10px] font-medium tracking-wide italic transition-opacity select-none pointer-events-none text-gray-400 dark:text-brand-darkIcon/60">
                                                     {message.timestamp.toLocaleTimeString([], {
                                                         hour: '2-digit',
