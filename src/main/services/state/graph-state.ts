@@ -61,6 +61,14 @@ export const graphState: StateGraphArgs<AgentState>['channels'] = {
         value: (_x, y) => y,
         default: () => true,
     },
+    interactionMissingFields: {
+        value: (_x, y) => y,
+        default: () => []
+    },
+    interactionAskedFields: {
+        value: (_x, y) => y,
+        default: () => []
+    }
 };
 
 /**
@@ -88,8 +96,7 @@ export function validateMessageSequence(messages: BaseMessage[]): BaseMessage[] 
                 // Skip this tool message as it doesn't have a valid preceding AI message
                 console.warn(`Skipping orphaned tool message: ${message.name} (id: ${message.id})`);
                 console.warn(
-                    `Previous message type: ${prevMessage?.constructor.name}, tool_calls: ${
-                        prevMessage instanceof AIMessage ? prevMessage.tool_calls?.length : 'N/A'
+                    `Previous message type: ${prevMessage?.constructor.name}, tool_calls: ${prevMessage instanceof AIMessage ? prevMessage.tool_calls?.length : 'N/A'
                     }`
                 );
                 continue;
@@ -117,8 +124,7 @@ export function validateMessageSequence(messages: BaseMessage[]): BaseMessage[] 
     }
 
     console.log(
-        `Validated ${validatedMessages.length} messages (filtered ${
-            messages.length - validatedMessages.length
+        `Validated ${validatedMessages.length} messages (filtered ${messages.length - validatedMessages.length
         })`
     );
     return validatedMessages;
@@ -172,11 +178,10 @@ function deduplicateMessages(messages: BaseMessage[]): BaseMessage[] {
 
     for (const message of messages) {
         // Create a unique key based on multiple properties
-        const key = `${message.constructor.name}-${message.id || 'no-id'}-${
-            typeof message.content === 'string'
-                ? message.content.substring(0, 100)
-                : JSON.stringify(message.content).substring(0, 100)
-        }`;
+        const key = `${message.constructor.name}-${message.id || 'no-id'}-${typeof message.content === 'string'
+            ? message.content.substring(0, 100)
+            : JSON.stringify(message.content).substring(0, 100)
+            }`;
 
         if (!seen.has(key)) {
             seen.add(key);

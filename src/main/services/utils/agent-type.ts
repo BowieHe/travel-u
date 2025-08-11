@@ -12,7 +12,8 @@ export type AgentNode =
     | 'planner'
     | 'direct_answer'
     | 'agent_placeholder'
-    | 'ask_user';
+    | 'ask_user'
+    | 'trip_plan_summary';
 
 export type UserNode = 'ask_user' | 'process_response' | 'reletive_time';
 
@@ -52,6 +53,9 @@ export interface AgentState {
     interactionMissingFields?: string[];
     // 已经询问过的字段，避免重复提问
     interactionAskedFields?: string[];
+
+    // 标记当前执行因需要用户输入而中断（interrupt）
+    awaiting_user?: boolean;
 }
 
 export interface UserInteractionState {

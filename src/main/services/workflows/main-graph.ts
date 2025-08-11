@@ -13,6 +13,7 @@ import { createUserInteractionSubgraph } from './user-interaction/graph';
 import { createRouterNode } from '../agents/orchestrator';
 import { createDirectAnswerNode } from '../agents/directAnswer';
 import { createPlannerNode } from '../agents/planner';
+import { createTripPlanSummaryNode } from '../agents/trip-plan-summary';
 
 export const initializeGraph = async () => {
     const { tools: mcpTools } = await createMcpTools();
@@ -62,6 +63,7 @@ export const initializeGraph = async () => {
     const routerNode = createRouterNode();
     const directNode = createDirectAnswerNode();
     const plannerNode = createPlannerNode();
+    const tripPlanSummaryNode = createTripPlanSummaryNode();
 
     // 条件路由：根据 router 节点在 memory.routing.decision 中的决策跳转
     const routeAfterRouter = (state: AgentState): string => {
@@ -85,17 +87,20 @@ export const initializeGraph = async () => {
         .addNode('planner', plannerNode)
         // .addNode('orchestrator', orchestrator) // legacy combined node (still available if needed)
         .addNode('ask_user', askUserNode)
+        .addNode('trip_plan_summary', tripPlanSummaryNode)
         .addNode('agent_placeholder', agentPlaceholder)
         .addEdge(START, 'router')
         .addConditionalEdges('router', (state) => state.next, {
             direct_answer: 'direct_answer',
             planner: 'planner',
-            ask_user: 'ask_user',
+            ask_user: 'trip_plan_summary', // 先进入 trip_plan_summary
             agent_placeholder: 'agent_placeholder',
         })
         .addEdge('direct_answer', END)
         .addEdge('planner', END)
-        // 用户交互完成后进入 planner（子图完成时会设置 next: 'planner'）
+        // trip_plan_summary 完成后进入 ask_user
+        .addEdge('trip_plan_summary', 'ask_user')
+        // ask_user 完成后进入 planner
         .addEdge('ask_user', 'planner')
         .addEdge('agent_placeholder', END);
     // .addEdge('planner', 'orchestrator') // 如果想在 planner 后再交由 orchestrator 二次处理，可启用

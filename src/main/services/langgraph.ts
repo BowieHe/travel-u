@@ -13,7 +13,7 @@ export class LangGraphService {
     private isInitialized = false;
     private initializationPromise: Promise<void> | null = null;
 
-    private constructor() {}
+    private constructor() { }
 
     static getInstance(): LangGraphService {
         if (!LangGraphService.instance) {
@@ -62,48 +62,52 @@ export class LangGraphService {
         const config = { configurable: { thread_id: sessionId } };
         let lastNode: string | null = null;
         let lastContent: string | null = null;
+        let awaiting = false;
         try {
-            const stream: AsyncIterable<[BaseMessage, RunnableConfig]> = await this.graph.stream(
-                initialState,
-                {
-                    ...config,
-                    streamMode: 'messages',
-                }
-            );
+            const stream: any = await this.graph.stream(initialState, {
+                ...config,
+                streamMode: 'messages',
+            });
             for await (const item of stream) {
-                const msg = item[0];
-                const meta: any = item[1] || {};
-                const nodeName: string = meta.langgraph_node || meta.name || '';
-                if (!msg) continue;
-                const ctor = (msg as any)?.constructor?.name;
-                if (ctor === 'AIMessageChunk') continue; // 忽略增量块
-                let content: any = (msg as any).content;
-                if (Array.isArray(content)) {
-                    content = content
-                        .map((c: any) => (typeof c === 'string' ? c : c?.text || ''))
-                        .join('');
-                }
-                if (typeof content !== 'string') continue;
-                const text = content.trim();
-                if (!text) continue;
-                if (text === message.trim()) continue; // 跳过用户回显
-                if (lastContent && text === lastContent) continue; // 去重相同内容
-                if (nodeName && lastNode && nodeName !== lastNode) {
-                    yield '\n';
-                }
-                lastNode = nodeName;
-                // router JSON 后补换行
-                if (/^\{"decision":/.test(text)) {
-                    yield text + '\n';
-                } else {
+                // LangGraph 新形式：可能是 [message, config] 或 state snapshot
+                if (Array.isArray(item)) {
+                    const msg = item[0] as BaseMessage;
+                    const meta: any = item[1] || {};
+                    const nodeName: string = meta.langgraph_node || meta.name || '';
+                    if (!msg) continue;
+                    const ctor = (msg as any)?.constructor?.name;
+                    if (ctor === 'AIMessageChunk') continue;
+                    let content: any = (msg as any).content;
+                    if (Array.isArray(content)) {
+                        content = content
+                            .map((c: any) => (typeof c === 'string' ? c : c?.text || ''))
+                            .join('');
+                    }
+                    if (typeof content !== 'string') continue;
+                    const text = content.trim();
+                    if (!text) continue;
+                    if (text === message.trim()) continue;
+                    if (lastContent && text === lastContent) continue;
+                    if (nodeName && lastNode && nodeName !== lastNode) {
+                        yield '\n';
+                    }
+                    lastNode = nodeName;
                     yield text;
+                    lastContent = text;
+                } else if (item && typeof item === 'object') {
+                    // 可能是最终状态快照（某些实现中提供）
+                    const state = item as AgentState;
+                    if ((state as any).awaiting_user) awaiting = true;
                 }
-                lastContent = text;
             }
         } catch (e: any) {
             console.error('执行图时异常:', e);
             yield JSON.stringify({ error: 'EXECUTION_ERROR', message: e.message });
             return;
+        }
+        if (awaiting) {
+            yield '\n';
+            yield JSON.stringify({ type: 'interrupt', code: 'user_input_needed' });
         }
     }
 

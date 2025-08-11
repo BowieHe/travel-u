@@ -1,17 +1,42 @@
-import { TripPlan, isTripPlanComplete, getMissingField } from '../../tools/trip-plan';
 import { StateGraph, START, END, interrupt } from '@langchain/langgraph';
 import { graphState } from '../../state/graph-state';
-import { AgentState } from '../../utils/agent-type';
+import { AgentState, TripPlan } from '../../utils/agent-type';
 import { AIMessage, HumanMessage } from '@langchain/core/messages';
 import { DynamicStructuredTool } from '@langchain/core/tools';
 import { createTimeDecodeNode } from './node-relative-time';
 import { createUserResponse } from './user-response';
 
-const startRouter = (_state: AgentState): 'process_response' | 'ask_user' => {
-    // 进入子图时如果是用户继续回答，直接处理；否则发起提问
-    const last = _state.messages[_state.messages.length - 1];
-    return last && last.getType() === 'human' ? 'process_response' : 'ask_user';
-};
+// Helper functions for TripPlan validation
+function isTripPlanComplete(tripPlan: TripPlan): boolean {
+    const requiredFields = ['destination', 'departure', 'startDate'];
+    return requiredFields.every((field) => {
+        const value = (tripPlan as any)[field];
+        return (
+            value !== undefined &&
+            value !== null &&
+            (typeof value !== 'string' || value.trim() !== '')
+        );
+    });
+}
+
+function getMissingField(tripPlan: TripPlan): string[] {
+    const missingFields: string[] = [];
+    if (!tripPlan.destination) missingFields.push('destination');
+    if (!tripPlan.departure) missingFields.push('departure');
+    if (!tripPlan.startDate) missingFields.push('startDate');
+    if (!tripPlan.endDate) missingFields.push('endDate');
+    if (tripPlan.budget === undefined || tripPlan.budget === null)
+        missingFields.push('budget');
+    if (!tripPlan.transportation) missingFields.push('transportation');
+
+    return missingFields;
+}
+
+// const startRouter = (_state: AgentState): 'process_response' | 'ask_user' => {
+//     // 进入子图时如果是用户继续回答，直接处理；否则发起提问
+//     const last = _state.messages[_state.messages.length - 1];
+//     return last && last.getType() === 'human' ? 'process_response' : 'ask_user';
+// };
 
 // 生成询问用户的消息
 function summarizeCollected(plan: TripPlan): string {
@@ -77,7 +102,7 @@ const askUserNode = async (state: AgentState): Promise<Partial<AgentState>> => {
     // 若已经有待提问字段列表使用之；否则根据 tripPlan 重新计算
     let missing = state.interactionMissingFields;
     if (!missing || missing.length === 0) {
-        missing = getMissingField((state.tripPlan || {}) as TripPlan);
+        missing = getMissingField(state.tripPlan || {});
     }
     if (!missing.length) {
         console.log('无缺失字段，标记交互完成');
@@ -97,7 +122,7 @@ const askUserNode = async (state: AgentState): Promise<Partial<AgentState>> => {
     // 单字段追问策略：找第一个未问的
     let target = sorted.find((f) => !asked.has(f));
     if (!target) target = sorted[0];
-    const question = generateQuestionForUser([target], (state.tripPlan || {}) as TripPlan);
+    const question = generateQuestionForUser([target], state.tripPlan || {});
     const updatedAsked = [...asked, target];
     return {
         interactionMissingFields: missing,
@@ -108,10 +133,8 @@ const askUserNode = async (state: AgentState): Promise<Partial<AgentState>> => {
 
 // 等待用户输入节点
 const waitForUserNode = async (_state: AgentState): Promise<Partial<AgentState>> => {
-    // 触发外部等待；执行器应注入用户输入后继续
-    const userInput = interrupt('user_input_needed');
-    // userInput 在恢复时会被替换为字符串；此处直接返回，不预先写入 messages，交由 relative_time 节点读取最后 human
-    return { messages: [] };
+    interrupt('user_input_needed');
+    return { messages: [], awaiting_user: true };
 };
 
 // // 处理用户回复并提取信息节点
@@ -184,10 +207,11 @@ export function createUserInteractionSubgraph(tools: DynamicStructuredTool[]) {
         .addNode('complete_interaction', completeInteractionNode)
 
         // 开始路由：根据消息类型决定流向
-        .addConditionalEdges(START, startRouter, {
-            ask_user: 'ask_user',
-            process_response: 'relative_time',
-        })
+        // .addConditionalEdges(START, startRouter, {
+        //     ask_user: 'ask_user',
+        //     process_response: 'relative_time',
+        // })
+        .addEdge(START, 'ask_user')
 
         // 询问用户 -> 等待输入
         .addEdge('ask_user', 'wait_for_user')

@@ -2,6 +2,7 @@ import { SystemMessage } from '@langchain/core/messages';
 import { DeepSeek } from '../models/deepseek';
 import { AgentState } from '../utils/agent-type';
 import { ROUTER_PROMPT } from '../prompts/prompt';
+import { parseSchema } from '../utils/tool'
 
 import { z } from 'zod';
 
@@ -86,7 +87,8 @@ export const createRouterNode = () => {
         // console.log('get response in orch:', response);
         const raw = flattenContent(response);
 
-        const routing = parseRouting(raw);
+        // const routing = parseRouting(raw);
+        const routing = parseSchema<Routing>(raw, routingSchema)
 
         // 决策 -> next 映射
         let next: AgentState['next'];
