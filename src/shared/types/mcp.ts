@@ -23,19 +23,19 @@ export interface McpInitializedEvent {
 /**
  * MCP 客户端配置
  */
-export interface BaseMCP<T extends "sse" | "stdio"> {
+export interface BaseMCP<T extends 'sse' | 'stdio'> {
     type: T;
 }
 
-export interface StdioServerConfig extends BaseMCP<"stdio"> {
-    type: "stdio";
+export interface StdioServerConfig extends BaseMCP<'stdio'> {
+    type: 'stdio';
     command: string;
     args: string[];
     env?: Record<string, string>;
 }
 
-export interface SSEServerConfig extends BaseMCP<"sse"> {
-    type: "sse";
+export interface SSEServerConfig extends BaseMCP<'sse'> {
+    type: 'sse';
     url: string;
 }
 

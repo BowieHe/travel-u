@@ -1,5 +1,5 @@
 import { AIMessage, SystemMessage } from '@langchain/core/messages';
-import { Gemini } from '../models/gemini';
+import { DeepSeek } from '../models/deepseek';
 import { AgentState } from '../utils/agent-type';
 import { PLAN_JSON_SCHEMA, PlanJson } from './plan-schema';
 
@@ -42,8 +42,8 @@ function extractFirstJson(text: string): any | null {
 }
 
 export const createDirectAnswerNode = () => {
-    const llm = new Gemini();
-    const model = llm.llm('gemini-2.5-flash');
+    const llm = new DeepSeek();
+    const model = llm.llm('deepseek-chat');
 
     return async (state: AgentState): Promise<Partial<AgentState>> => {
         const system = new SystemMessage({ content: DIRECT_PROMPT });

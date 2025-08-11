@@ -1,12 +1,12 @@
-import { AgentState, TripPlan } from "../../utils/agent-type";
-import { getTripPlanSchema } from "../../tools/trip-plan";
-import { Gemini } from "../../models/gemini";
-import { AIMessage, SystemMessage } from "@langchain/core/messages";
-import { isTripPlanComplete, mergeTripPlan } from "../../tools/trip-plan";
+import { AgentState, TripPlan } from '../../utils/agent-type';
+import { getTripPlanSchema, getMissingField } from '../../tools/trip-plan';
+import { DeepSeek } from '../../models/deepseek';
+import { AIMessage, SystemMessage } from '@langchain/core/messages';
+import { isTripPlanComplete, mergeTripPlan } from '../../tools/trip-plan';
 
 export const createUserResponse = () => {
-    const gemini = new Gemini();
-    const model = gemini.llm("gemini-2.5-flash-lite-preview-06-17");
+    const llm = new DeepSeek();
+    const model = llm.llm('deepseek-chat');
     const tripPlanSchema = getTripPlanSchema();
     const structuredLlm = model.withStructuredOutput(tripPlanSchema as any);
     const extractionPrompt = `你是一个专业的旅行信息提取助手。
@@ -58,45 +58,50 @@ export const createUserResponse = () => {
             // 过滤消息：只保留 Human、AI 和 System 消息，排除 Tool 相关消息
             const filteredMessages = state.messages.filter((msg) => {
                 const messageType = msg.getType();
-                return messageType === "human" || messageType === "ai";
+                return messageType === 'human' || messageType === 'ai';
             });
 
             const extractedInfo = await structuredLlm.invoke([
                 new SystemMessage({
                     content: extractionPrompt.replace(
-                        "{trip_plan}",
+                        '{trip_plan}',
                         JSON.stringify(currentTravelPlan, null, 2)
                     ),
                 }),
                 ...filteredMessages.slice(-3), // 只取最近3条非工具消息
             ]);
 
-            console.log("LLM原始提取结果:", extractedInfo);
-            console.log("当前已有信息:", currentTravelPlan);
+            console.log('LLM原始提取结果:', extractedInfo);
+            console.log('当前已有信息:', currentTravelPlan);
 
             // 使用工具函数合并 TripPlan
-            const updatedTravelPlan = mergeTripPlan(
-                currentTravelPlan,
-                extractedInfo
-            );
+            // 规范化 transportation 以匹配工具枚举 (flight/train/car)
+            const normalized = { ...extractedInfo } as any;
+            if (
+                normalized.transportation &&
+                !['flight', 'train', 'car'].includes(normalized.transportation)
+            ) {
+                delete normalized.transportation;
+            }
+            const updatedTravelPlan = mergeTripPlan(currentTravelPlan as any, normalized);
 
+            const remaining = getMissingField(updatedTravelPlan as any);
             const isComplete = isTripPlanComplete(updatedTravelPlan);
-
-            console.log("合并后的旅行计划:", updatedTravelPlan);
+            console.log('合并后的旅行计划:', updatedTravelPlan, 'remaining:', remaining);
             return {
                 tripPlan: updatedTravelPlan,
                 user_interaction_complete: isComplete,
+                interactionMissingFields: remaining,
             };
         } catch (e) {
-            console.error("信息提取或更新失败:", e);
+            console.error('信息提取或更新失败:', e);
             // 如果提取失败，可以返回原始 state 或添加错误消息
             return {
                 tripPlan: currentTravelPlan,
                 messages: [
                     // ...state.messages,
                     new AIMessage({
-                        content:
-                            "抱歉，我未能完全理解您的旅行计划信息，请您再详细说明一下。",
+                        content: '抱歉，我未能完全理解您的旅行计划信息，请您再详细说明一下。',
                     }),
                 ],
             };

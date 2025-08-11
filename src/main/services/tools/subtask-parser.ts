@@ -1,12 +1,10 @@
-import { AgentState } from "@shared/types/agent";
-import { extractAndParseJSON } from "./json-parser"; // 你的 JSON 解析工具
-import { AnyExpertTask } from "../utils/task-type";
+import { AgentState } from '../utils/agent-type';
+import { extractAndParseJSON } from './json-parser'; // 你的 JSON 解析工具
+import { AnyExpertTask } from '../utils/task-type';
 
 // todo) add basic information into memory
-export const subtaskParserNode = async (
-    state: AgentState
-): Promise<Partial<AgentState>> => {
-    console.log("--- Executing Subtask Parser Node ---");
+export const subtaskParserNode = async (state: AgentState): Promise<Partial<AgentState>> => {
+    console.log('--- Executing Subtask Parser Node ---');
     // sub-task already parsed, continue and route to next subtask
     const subTasks = state.subtask;
     if (subTasks.length > 0 && state.currentTaskIndex < subTasks.length) {
@@ -20,7 +18,7 @@ export const subtaskParserNode = async (
             // already iter all the tasks, return back to summary node
             return {
                 currentTaskIndex: -1,
-                next: "summary",
+                next: 'summary',
             };
         }
     }
@@ -30,20 +28,16 @@ export const subtaskParserNode = async (
 
     try {
         const taskPromptJson = lastMessage.content.toString();
-        const parsedTasks =
-            extractAndParseJSON<AnyExpertTask[]>(taskPromptJson);
+        const parsedTasks = extractAndParseJSON<AnyExpertTask[]>(taskPromptJson);
 
         if (!parsedTasks) {
-            console.error("Invalid task prompt structure:", taskPromptJson);
+            console.error('Invalid task prompt structure:', taskPromptJson);
             return {
-                errorMessage: "Invalid task prompt structure received.",
+                errorMessage: 'Invalid task prompt structure received.',
             };
         }
 
-        console.log(
-            "Successfully parsed structured task:",
-            JSON.stringify(parsedTasks, null, 2)
-        );
+        console.log('Successfully parsed structured task:', JSON.stringify(parsedTasks, null, 2));
         // 返回一个 Partial<AgentState> 来更新状态
         return {
             subtask: parsedTasks,
@@ -52,7 +46,7 @@ export const subtaskParserNode = async (
             errorMessage: undefined,
         };
     } catch (e: any) {
-        console.error("Error parsing generate_task_prompt output:", e);
+        console.error('Error parsing generate_task_prompt output:', e);
         return {
             errorMessage: `Failed to parse task prompt: ${e.message}`,
         };

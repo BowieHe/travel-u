@@ -1,9 +1,9 @@
-import { StateGraphArgs } from "@langchain/langgraph";
-import { AgentState } from "../utils/agent-type";
-import { BaseMessage, AIMessage, ToolMessage } from "@langchain/core/messages";
+import { StateGraphArgs } from '@langchain/langgraph';
+import { AgentState } from '../utils/agent-type';
+import { BaseMessage, AIMessage, ToolMessage } from '@langchain/core/messages';
 // import { TripPlan } from "@/tools/trip-plan";
 
-export const graphState: StateGraphArgs<AgentState>["channels"] = {
+export const graphState: StateGraphArgs<AgentState>['channels'] = {
     messages: {
         value: (x: BaseMessage[], y: BaseMessage[]) => {
             // // 更安全的消息合并逻辑
@@ -30,7 +30,7 @@ export const graphState: StateGraphArgs<AgentState>["channels"] = {
     },
     next: {
         value: (_x, y) => y,
-        default: () => "orchestrator",
+        default: () => 'orchestrator',
     },
     subtask: {
         value: (_x, y) => y,
@@ -39,10 +39,6 @@ export const graphState: StateGraphArgs<AgentState>["channels"] = {
     currentTaskIndex: {
         value: (_x, y) => y,
         default: () => -1,
-    },
-    memory: {
-        value: (x, y) => ({ ...x, ...y }),
-        default: () => ({}),
     },
     currentSpecialist: {
         value: (x, y) => y ?? x,
@@ -71,9 +67,7 @@ export const graphState: StateGraphArgs<AgentState>["channels"] = {
  * Validates that the message sequence is correct for OpenAI API.
  * Ensures that every tool message is preceded by an AI message with tool_calls.
  */
-export function validateMessageSequence(
-    messages: BaseMessage[]
-): BaseMessage[] {
+export function validateMessageSequence(messages: BaseMessage[]): BaseMessage[] {
     if (!messages || messages.length === 0) return messages;
 
     const validatedMessages: BaseMessage[] = [];
@@ -92,16 +86,10 @@ export function validateMessageSequence(
                 prevMessage.tool_calls.length === 0
             ) {
                 // Skip this tool message as it doesn't have a valid preceding AI message
+                console.warn(`Skipping orphaned tool message: ${message.name} (id: ${message.id})`);
                 console.warn(
-                    `Skipping orphaned tool message: ${message.name} (id: ${message.id})`
-                );
-                console.warn(
-                    `Previous message type: ${
-                        prevMessage?.constructor.name
-                    }, tool_calls: ${
-                        prevMessage instanceof AIMessage
-                            ? prevMessage.tool_calls?.length
-                            : "N/A"
+                    `Previous message type: ${prevMessage?.constructor.name}, tool_calls: ${
+                        prevMessage instanceof AIMessage ? prevMessage.tool_calls?.length : 'N/A'
                     }`
                 );
                 continue;
@@ -119,7 +107,7 @@ export function validateMessageSequence(
                 console.warn(
                     `Available tool_call_ids: ${prevMessage.tool_calls
                         .map((tc) => tc.id)
-                        .join(", ")}`
+                        .join(', ')}`
                 );
                 continue;
             }
@@ -165,9 +153,7 @@ function processReActMessages(
     const baseMessages = existingMessages.slice(0, lastNonReactIndex + 1);
 
     // From new messages, only keep the final AI message (skip intermediate tool calls)
-    const finalAIMessage = newMessages
-        .filter((msg) => msg instanceof AIMessage)
-        .pop(); // Get the last AI message
+    const finalAIMessage = newMessages.filter((msg) => msg instanceof AIMessage).pop(); // Get the last AI message
 
     if (finalAIMessage) {
         return [...baseMessages, finalAIMessage];
@@ -186,8 +172,8 @@ function deduplicateMessages(messages: BaseMessage[]): BaseMessage[] {
 
     for (const message of messages) {
         // Create a unique key based on multiple properties
-        const key = `${message.constructor.name}-${message.id || "no-id"}-${
-            typeof message.content === "string"
+        const key = `${message.constructor.name}-${message.id || 'no-id'}-${
+            typeof message.content === 'string'
                 ? message.content.substring(0, 100)
                 : JSON.stringify(message.content).substring(0, 100)
         }`;
