@@ -1,0 +1,37 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Start Vite (Web)",
+            "type": "shell",
+            "command": "yarn",
+            "args": ["vite", "--config", "vite.config.ts"],
+            "options": {
+                "env": { "VITE_IS_WEB": "true" }
+            },
+            "isBackground": true,
+            "problemMatcher": [
+                {
+                    "owner": "vite",
+                    "fileLocation": "absolute",
+                    "pattern": {
+                        "regexp": ".*"
+                    },
+                    "background": {
+                        "activeOnStart": true,
+                        "beginsPattern": "^\u001b\\[\u0030-\u0039;]*m?VITE|^VITE",
+                        "endsPattern": "Local:\\s*http://"
+                    }
+                }
+            ]
+        },
+        {
+            "label": "Start Backend (web-server)",
+            "type": "shell",
+            "command": "yarn",
+            "args": ["dev:api"],
+            "isBackground": false,
+            "problemMatcher": []
+        }
+    ]
+}
