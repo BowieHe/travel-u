@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { marked } from 'marked';
 import {
     HelpCircle,
     RotateCcw,
@@ -8,8 +7,6 @@ import {
     Send,
     ChevronsLeft,
     ChevronsRight,
-    Bot,
-    User,
 } from 'lucide-react';
 import { createChatAPI } from '@/main/ipc/chat-api';
 

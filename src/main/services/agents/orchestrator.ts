@@ -1,7 +1,7 @@
 import { Gemini } from '../models/gemini';
-import { z } from 'zod';
 import { AgentState } from '../utils/agent-type';
 import { AIMessage, SystemMessage } from '@langchain/core/messages';
+import { PLAN_JSON_SCHEMA } from './plan-schema';
 // NOTE: Legacy prompt imports removed. Keep file minimal for meta planning.
 
 // =============== 新的编排逻辑 ===============
@@ -18,27 +18,7 @@ import { AIMessage, SystemMessage } from '@langchain/core/messages';
 //   ]
 // }
 
-// Unified schema for orchestrator output.
-const PLAN_JSON_SCHEMA = z.object({
-    thinking: z.string().optional(),
-    direct_answer: z.string().optional(),
-    plan: z.array(
-        z.object({
-            description: z.string(),
-            category: z
-                .enum([
-                    'research',
-                    'booking',
-                    'transportation',
-                    'accommodation',
-                    'activity',
-                    'other',
-                ])
-                .optional(),
-            priority: z.enum(['high', 'medium', 'low']).optional(),
-        })
-    ).optional(),
-});
+// Schema moved to plan-schema.ts for sharing with new directAnswer / planner nodes.
 
 function extractFirstJsonBlock(text: string): any | null {
     // 尝试提取第一个 JSON 对象
