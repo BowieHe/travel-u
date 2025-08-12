@@ -49,6 +49,7 @@ export const ChatDrawer: React.FC<{
     const [inputMessage, setInputMessage] = useState('');
     const [messages, setMessages] = useState<Message[]>(mockMessages); // 初始为空, 只显示建议
     const [isLoading, setIsLoading] = useState(false);
+    const [awaitingUser, setAwaitingUser] = useState(false);
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
     const scrollToBottom = () => {
@@ -98,7 +99,15 @@ export const ChatDrawer: React.FC<{
         try {
             let fullResponse = '';
             chatAPI.onMessage((chunk: string) => {
-                console.log('get content from chatAPI.onMessage', chunk);
+                // 尝试解析 interrupt JSON
+                try {
+                    const obj = JSON.parse(chunk);
+                    if (obj && obj.type === 'interrupt') {
+                        setAwaitingUser(true);
+                        setIsLoading(false);
+                        return; // 不把中断对象显示为文本
+                    }
+                } catch {}
                 fullResponse += chunk;
                 setMessages((prev) =>
                     prev.map((msg) =>
@@ -110,6 +119,7 @@ export const ChatDrawer: React.FC<{
             });
             chatAPI.onComplete(() => {
                 setIsLoading(false);
+                if (!awaitingUser) setAwaitingUser(false); // 正常完成清除等待
                 setMessages((prev) =>
                     prev.map((msg) => (msg.id === aiMessageId ? { ...msg, isLoading: false } : msg))
                 );
@@ -130,7 +140,12 @@ export const ChatDrawer: React.FC<{
                 );
                 chatAPI.cleanup();
             });
-            await chatAPI.streamMessage(currentMessage);
+            if (awaitingUser) {
+                setAwaitingUser(false); // 准备发送补充信息
+                await chatAPI.resumeMessage(currentMessage);
+            } else {
+                await chatAPI.streamMessage(currentMessage);
+            }
         } catch (error) {
             console.error('发送消息失败:', error);
             setIsLoading(false);

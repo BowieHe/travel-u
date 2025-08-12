@@ -35,6 +35,7 @@ async function initializeServices() {
 app.get('/api/chat/sse', async (req, res) => {
     try {
         const message = req.query.message as string;
+        const resume = req.query.resume === '1';
         if (!message) {
             res.writeHead(400, { 'Content-Type': 'text/event-stream' });
             res.write(`event: error\ndata: ${JSON.stringify({ error: '消息不能为空' })}\n\n`);
@@ -55,7 +56,9 @@ app.get('/api/chat/sse', async (req, res) => {
             await initializeServices();
         }
 
-        const stream = langGraphService.streamMessage(message);
+        const stream = resume
+            ? langGraphService.resumeStream(message)
+            : langGraphService.streamMessage(message);
         for await (const chunk of stream) {
             res.write(`event: chunk\ndata: ${JSON.stringify({ content: chunk })}\n\n`);
         }

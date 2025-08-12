@@ -13,7 +13,7 @@ export class LangGraphService {
     private isInitialized = false;
     private initializationPromise: Promise<void> | null = null;
 
-    private constructor() { }
+    private constructor() {}
 
     static getInstance(): LangGraphService {
         if (!LangGraphService.instance) {
@@ -60,9 +60,8 @@ export class LangGraphService {
             user_interaction_complete: false,
         };
         const config = { configurable: { thread_id: sessionId } };
-        let lastNode: string | null = null;
-        let lastContent: string | null = null;
         let awaiting = false;
+        let lastContent: string | null = null;
         try {
             const stream: any = await this.graph.stream(initialState, {
                 ...config,
@@ -72,11 +71,7 @@ export class LangGraphService {
                 // LangGraph 新形式：可能是 [message, config] 或 state snapshot
                 if (Array.isArray(item)) {
                     const msg = item[0] as BaseMessage;
-                    const meta: any = item[1] || {};
-                    const nodeName: string = meta.langgraph_node || meta.name || '';
                     if (!msg) continue;
-                    const ctor = (msg as any)?.constructor?.name;
-                    if (ctor === 'AIMessageChunk') continue;
                     let content: any = (msg as any).content;
                     if (Array.isArray(content)) {
                         content = content
@@ -87,13 +82,9 @@ export class LangGraphService {
                     const text = content.trim();
                     if (!text) continue;
                     if (text === message.trim()) continue;
-                    if (lastContent && text === lastContent) continue;
-                    if (nodeName && lastNode && nodeName !== lastNode) {
-                        yield '\n';
-                    }
-                    lastNode = nodeName;
-                    yield text;
+                    if (lastContent && lastContent === text) continue;
                     lastContent = text;
+                    yield text;
                 } else if (item && typeof item === 'object') {
                     // 可能是最终状态快照（某些实现中提供）
                     const state = item as AgentState;
@@ -106,7 +97,6 @@ export class LangGraphService {
             return;
         }
         if (awaiting) {
-            yield '\n';
             yield JSON.stringify({ type: 'interrupt', code: 'user_input_needed' });
         }
     }
@@ -115,7 +105,94 @@ export class LangGraphService {
         return this.isInitialized && this.graph !== null;
     }
 
-    async resetSession(_sessionId: string): Promise<void> {
-        // 暂无状态持久化，预留接口
+    async resume(message: string, sessionId = 'default'): Promise<string[]> {
+        if (!this.isInitialized || !this.graph) throw new Error('NOT_INITIALIZED');
+        // 仅附加新的用户消息继续执行，不重置状态
+        const updates: Partial<AgentState> = {
+            messages: [new HumanMessage(message)],
+            awaiting_user: false,
+        };
+        const config = { configurable: { thread_id: sessionId }, streamMode: 'messages' } as any;
+        const outputs: string[] = [];
+        const stream: any = await this.graph.stream(updates, config);
+        let lastContent: string | null = null;
+        let awaiting = false;
+        for await (const item of stream) {
+            if (Array.isArray(item)) {
+                const msg = item[0] as BaseMessage;
+                if (!msg) continue;
+                let content: any = (msg as any).content;
+                if (Array.isArray(content)) {
+                    content = content
+                        .map((c: any) => (typeof c === 'string' ? c : c?.text || ''))
+                        .join('');
+                }
+                if (typeof content !== 'string') continue;
+                const text = content.trim();
+                if (!text) continue;
+                if (text === message.trim()) continue;
+                if (lastContent && lastContent === text) continue;
+                lastContent = text;
+                outputs.push(text);
+            } else if (item && typeof item === 'object') {
+                const state = item as AgentState;
+                if ((state as any).awaiting_user) awaiting = true;
+            }
+        }
+        if (awaiting)
+            outputs.push(JSON.stringify({ type: 'interrupt', code: 'user_input_needed' }));
+        return outputs;
+    }
+
+    async *resumeStream(
+        message: string,
+        sessionId = 'default'
+    ): AsyncGenerator<string, void, unknown> {
+        if (!this.isInitialized || !this.graph) {
+            yield JSON.stringify({ error: 'NOT_INITIALIZED' });
+            return;
+        }
+        const updates: Partial<AgentState> = {
+            messages: [new HumanMessage(message)],
+            awaiting_user: false,
+        };
+        const config = { configurable: { thread_id: sessionId } };
+        let awaiting = false;
+        let lastContent: string | null = null;
+        try {
+            const stream: any = await this.graph.stream(updates, {
+                ...config,
+                streamMode: 'messages',
+            });
+            for await (const item of stream) {
+                if (Array.isArray(item)) {
+                    const msg = item[0] as BaseMessage;
+                    if (!msg) continue;
+                    let content: any = (msg as any).content;
+                    if (Array.isArray(content)) {
+                        content = content
+                            .map((c: any) => (typeof c === 'string' ? c : c?.text || ''))
+                            .join('');
+                    }
+                    if (typeof content !== 'string') continue;
+                    const text = content.trim();
+                    if (!text) continue;
+                    if (text === message.trim()) continue; // 跳过用户原始输入回显
+                    if (lastContent && lastContent === text) continue;
+                    lastContent = text;
+                    yield text;
+                } else if (item && typeof item === 'object') {
+                    const state = item as AgentState;
+                    if ((state as any).awaiting_user) awaiting = true;
+                }
+            }
+        } catch (e: any) {
+            console.error('续执行图时异常:', e);
+            yield JSON.stringify({ error: 'EXECUTION_ERROR', message: e.message });
+            return;
+        }
+        if (awaiting) {
+            yield JSON.stringify({ type: 'interrupt', code: 'user_input_needed' });
+        }
     }
 }

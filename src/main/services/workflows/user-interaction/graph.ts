@@ -137,6 +137,7 @@ const askUserNode = async (state: AgentState): Promise<Partial<AgentState>> => {
 // 等待用户输入节点
 const waitForUserNode = async (_state: AgentState): Promise<Partial<AgentState>> => {
     interrupt('user_input_needed');
+    // 恢复原行为：清空即时消息，标记等待用户
     return { messages: [], awaiting_user: true };
 };
 

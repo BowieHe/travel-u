@@ -7,6 +7,7 @@ import { isElectron, envInfo } from '@shared/utils/env-detector';
 
 export interface ChatAPI {
     streamMessage(message: string): Promise<void>;
+    resumeMessage(message: string): Promise<void>;
     onMessage(callback: (chunk: string) => void): void;
     onComplete(callback: () => void): void;
     onError(callback: (error: string) => void): void;
@@ -23,10 +24,19 @@ export class WebChatAPI implements ChatAPI {
     private eventSource?: EventSource;
 
     async streamMessage(message: string): Promise<void> {
+        return this.openSSE(message, false);
+    }
+
+    async resumeMessage(message: string): Promise<void> {
+        return this.openSSE(message, true);
+    }
+
+    private async openSSE(message: string, resume: boolean) {
         this.closeES();
         try {
-            // 使用 GET + query 形式便于 SSE
-            const url = `/api/chat/sse?message=${encodeURIComponent(message)}`;
+            const url = `/api/chat/sse?message=${encodeURIComponent(message)}${
+                resume ? '&resume=1' : ''
+            }`;
             this.eventSource = new EventSource(url);
 
             this.eventSource.addEventListener('chunk', (e: MessageEvent) => {
@@ -84,9 +94,8 @@ export class WebChatAPI implements ChatAPI {
 }
 
 /**
- * Electron 环境的 API 实现 - 使用 IPC
+ * Electron 环境的 API 实现 - 使用 IPC (当前直接复用 Web 实现)
  */
-// Electron 渲染进程同样可以直接使用 SSE（无需 IPC 中转），保持接口一致
 export class ElectronChatAPI extends WebChatAPI {}
 
 /**
@@ -94,11 +103,8 @@ export class ElectronChatAPI extends WebChatAPI {}
  */
 export function createChatAPI(): ChatAPI {
     console.log('Environment detection:', envInfo);
-
     if (isElectron) {
         return new ElectronChatAPI();
     }
-
-    // 默认使用 Web API
     return new WebChatAPI();
 }
