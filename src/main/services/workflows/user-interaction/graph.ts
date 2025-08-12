@@ -25,8 +25,7 @@ function getMissingField(tripPlan: TripPlan): string[] {
     if (!tripPlan.departure) missingFields.push('departure');
     if (!tripPlan.startDate) missingFields.push('startDate');
     if (!tripPlan.endDate) missingFields.push('endDate');
-    if (tripPlan.budget === undefined || tripPlan.budget === null)
-        missingFields.push('budget');
+    if (tripPlan.budget === undefined || tripPlan.budget === null) missingFields.push('budget');
     if (!tripPlan.transportation) missingFields.push('transportation');
 
     return missingFields;
@@ -88,6 +87,8 @@ function generateQuestionForUser(missingRequiredFields: string[], plan: TripPlan
             endDate: '结束日期',
             budget: '预算',
             transportation: '交通方式',
+            travelers: '旅行人数',
+            preferences: '旅行偏好',
         };
         const chineseMissing = missingRequiredFields.map((field) => fieldToChineseMap[field]);
         followUpMessage = `我们还需要知道以下信息：${chineseMissing.join('、')}。`;
@@ -117,6 +118,8 @@ const askUserNode = async (state: AgentState): Promise<Partial<AgentState>> => {
         'endDate',
         'budget',
         'transportation',
+        'travelers',
+        'preferences',
     ];
     const sorted = missing.sort((a, b) => priorityOrder.indexOf(a) - priorityOrder.indexOf(b));
     // 单字段追问策略：找第一个未问的

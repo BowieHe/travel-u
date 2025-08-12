@@ -1,51 +1,76 @@
-import { z } from 'zod'
-import { DeepSeek } from '../models/deepseek'
-import { AgentState, TripPlan } from '../utils/agent-type'
-import { SystemMessage } from '@langchain/core/messages'
-import { parseSchema } from '../utils/tool'
+import { z } from 'zod';
+import { DeepSeek } from '../models/deepseek';
+import { AgentState, TripPlan } from '../utils/agent-type';
+import { SystemMessage } from '@langchain/core/messages';
+import { parseSchema } from '../utils/tool';
 
-const tripPlanSchema = z.object({
-    destination: z.string().optional(),
-    departure: z.string().optional(),
-    startDate: z.string().optional(),
-    endDate: z.string().optional(),
-    budget: z.number().optional(),
-    travelers: z.number().optional(),
-    preferences: z.array(z.string()).optional(),
-    itinerary: z.array(z.object({
-        day: z.number(),
-        date: z.string(),
-        activities: z.array(z.object({
-            time: z.string(),
-            title: z.string(),
-            description: z.string(),
-            location: z.string(),
-            cost: z.number().optional(),
-            duration: z.number().optional(),
-            type: z.enum(['sightseeing', 'dining', 'entertainment', 'shopping', 'transportation', 'other'])
-        })),
-        transportation: z.object({
-            type: z.enum(['flight', 'train', 'bus', 'car', 'taxi', 'subway', 'walking']),
-            from: z.string(),
-            to: z.string(),
-            departureTime: z.string().optional(),
-            arrivalTime: z.string().optional(),
-            cost: z.number().optional(),
-            duration: z.number().optional(),
-            details: z.string().optional()
-        }).optional(),
-        accommodation: z.object({
-            name: z.string(),
-            type: z.enum(['hotel', 'hostel', 'apartment', 'bnb', 'other']),
-            location: z.string(),
-            checkIn: z.string(),
-            checkOut: z.string(),
-            cost: z.number().optional(),
-            rating: z.number().optional()
-        }).optional()
-    })).optional(),
-    transportation: z.string().optional()
-})
+export const tripPlanSchema = z.object({
+    destination: z.string().nullable(),
+    departure: z.string().nullable(),
+    startDate: z.string().nullable(),
+    endDate: z.string().nullable(),
+    budget: z.number().nullable(),
+    travelers: z.number().nullable(),
+    preferences: z.array(z.string()).nullable(),
+    itinerary: z
+        .array(
+            z.object({
+                day: z.number(),
+                date: z.string(),
+                activities: z.array(
+                    z.object({
+                        time: z.string(),
+                        title: z.string(),
+                        description: z.string(),
+                        location: z.string(),
+                        cost: z.number().optional(),
+                        duration: z.number().optional(),
+                        type: z.enum([
+                            'sightseeing',
+                            'dining',
+                            'entertainment',
+                            'shopping',
+                            'transportation',
+                            'other',
+                        ]),
+                    })
+                ),
+                transportation: z
+                    .object({
+                        type: z.enum([
+                            'flight',
+                            'train',
+                            'bus',
+                            'car',
+                            'taxi',
+                            'subway',
+                            'walking',
+                        ]),
+                        from: z.string(),
+                        to: z.string(),
+                        departureTime: z.string().optional(),
+                        arrivalTime: z.string().optional(),
+                        cost: z.number().optional(),
+                        duration: z.number().optional(),
+                        details: z.string().optional(),
+                    })
+                    .optional(),
+                accommodation: z
+                    .object({
+                        name: z.string(),
+                        type: z.enum(['hotel', 'hostel', 'apartment', 'bnb', 'other']),
+                        location: z.string(),
+                        checkIn: z.string(),
+                        checkOut: z.string(),
+                        cost: z.number().optional(),
+                        rating: z.number().optional(),
+                    })
+                    .optional(),
+            })
+        )
+        .nullable(),
+    transportation: z.string().nullable(),
+});
 
 const TRIP_PLAN_SUM = `你是一个专业的旅行计划助手。你的任务是仔细分析提供的对话历史，提取相关信息，并将它们填充到一个结构化的行程计划对象中。你的输出**必须**是一个有效的 JSON 对象，代表 TripPlan。
 
@@ -190,18 +215,22 @@ const TRIP_PLAN_SUM = `你是一个专业的旅行计划助手。你的任务是
 
 --- 
 
-现在，请分析下列对话历史，输出 TripPlan JSON`
+现在，请分析下列对话历史，输出 TripPlan JSON`;
 
 export const createTripPlanSummaryNode = () => {
-    const llm = new DeepSeek().llm("deepseek-chat")
+    const llm = new DeepSeek().llm('deepseek-chat');
 
     return async (state: AgentState): Promise<Partial<AgentState>> => {
-        const system = new SystemMessage({ content: TRIP_PLAN_SUM })
+        const system = new SystemMessage({ content: TRIP_PLAN_SUM });
+        console.log(
+            'Trip Plan Summary last Message:',
+            state.messages[state.messages.length - 1].content
+        );
 
-        const result = await llm.invoke([system, ...state.messages])
+        const result = await llm.invoke([system, ...state.messages]);
 
-        const trip = parseSchema<TripPlan>(result.content as string, tripPlanSchema)
+        const trip = parseSchema<TripPlan>(result.content as string, tripPlanSchema);
 
-        return { tripPlan: trip }
-    }
-}
+        return { tripPlan: trip };
+    };
+};

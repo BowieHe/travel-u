@@ -1,7 +1,35 @@
 import { AIMessage, SystemMessage } from '@langchain/core/messages';
 import { DeepSeek } from '../models/deepseek';
 import { AgentState } from '../utils/agent-type';
-import { PLAN_JSON_SCHEMA, PlanJson } from './plan-schema';
+
+import { z } from 'zod';
+
+// Unified schema for orchestrator / directAnswer / planner output.
+// Keep in one place to avoid divergence.
+const PLAN_JSON_SCHEMA = z.object({
+    thinking: z.string().optional(),
+    direct_answer: z.string().optional(),
+    plan: z
+        .array(
+            z.object({
+                description: z.string(),
+                category: z
+                    .enum([
+                        'research',
+                        'booking',
+                        'transportation',
+                        'accommodation',
+                        'activity',
+                        'other',
+                    ])
+                    .optional(),
+                priority: z.enum(['high', 'medium', 'low']).optional(),
+            })
+        )
+        .optional(),
+});
+
+type PlanJson = z.infer<typeof PLAN_JSON_SCHEMA>;
 
 // Prompt for planner mode; generate multi-step travel plan tasks only.
 const PLANNER_PROMPT = `你是一个旅行规划助手，当前模式: 规划 (planner)。

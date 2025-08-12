@@ -71,16 +71,16 @@ export interface UserInteractionState {
 }
 
 export interface TripPlan {
-    destination?: string;
+    destination?: string | null;
     // Added for alignment with trip-plan tool schema
-    departure?: string; // 出发城市
-    startDate?: string;
-    endDate?: string;
-    budget?: number;
-    travelers?: number;
-    preferences?: string[];
-    itinerary?: ItineraryItem[];
-    transportation?: string; // 用户明确的交通方式（不推断）
+    departure?: string | null; // 出发城市
+    startDate?: string | null;
+    endDate?: string | null;
+    budget?: number | null;
+    travelers?: number | null;
+    preferences?: string[] | null;
+    itinerary?: ItineraryItem[] | null;
+    transportation?: string | null; // 用户明确的交通方式（不推断）
 }
 
 export interface ItineraryItem {

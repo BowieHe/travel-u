@@ -1,5 +1,4 @@
-import { ZodSchema } from "zod";
-
+import { ZodSchema } from 'zod';
 
 export function parseSchema<T>(raw: string, schema: ZodSchema<T>): T {
     // 首先尝试直接 JSON.parse
@@ -25,8 +24,7 @@ export function parseSchema<T>(raw: string, schema: ZodSchema<T>): T {
     return (
         parsed ||
         ({
-            decision: 'planner',
-            missing_fields: null,
+            failed: 'true',
             reasoning: '降级：解析失败默认规划',
         } as T)
     );
