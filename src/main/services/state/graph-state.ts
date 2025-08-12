@@ -68,7 +68,26 @@ export const graphState: StateGraphArgs<AgentState>['channels'] = {
     interactionAskedFields: {
         value: (_x, y) => y,
         default: () => []
-    }
+    },
+    awaiting_user: {
+        value: (_x, y) => y,
+        default: () => false
+    },
+    // === LangGraph 内部字段管理 ===
+    interrupts: {
+        value: (x, y) => y ?? x, // 新的 interrupts 覆盖旧的，没有新的则保持现有
+        default: () => undefined,
+    },
+    metadata: {
+        value: (x, y) => {
+            // 合并 metadata 对象
+            if (!x && !y) return undefined;
+            if (!x) return y;
+            if (!y) return x;
+            return { ...x, ...y };
+        },
+        default: () => undefined,
+    },
 };
 
 /**

@@ -103,6 +103,7 @@ export const ChatDrawer: React.FC<{
                 try {
                     const obj = JSON.parse(chunk);
                     if (obj && obj.type === 'interrupt') {
+                        console.log('Received interrupt, setting awaiting user state');
                         setAwaitingUser(true);
                         setIsLoading(false);
                         return; // 不把中断对象显示为文本
@@ -127,6 +128,7 @@ export const ChatDrawer: React.FC<{
             });
             chatAPI.onError((error: string) => {
                 setIsLoading(false);
+                setAwaitingUser(false); // 错误时清除等待状态
                 setMessages((prev) =>
                     prev.map((msg) =>
                         msg.id === aiMessageId
@@ -140,15 +142,18 @@ export const ChatDrawer: React.FC<{
                 );
                 chatAPI.cleanup();
             });
+            
+            // 简化：始终使用 streamMessage，它内部会自动处理 resume 逻辑
+            console.log('Sending message (auto-resume if needed):', currentMessage);
             if (awaitingUser) {
-                setAwaitingUser(false); // 准备发送补充信息
-                await chatAPI.resumeMessage(currentMessage);
-            } else {
-                await chatAPI.streamMessage(currentMessage);
+                console.log('Was awaiting user, clearing awaiting state');
+                setAwaitingUser(false);
             }
+            await chatAPI.streamMessage(currentMessage);
         } catch (error) {
             console.error('发送消息失败:', error);
             setIsLoading(false);
+            setAwaitingUser(false); // 错误时清除等待状态
             setMessages((prev) =>
                 prev.map((msg) =>
                     msg.id === aiMessageId
@@ -319,6 +324,16 @@ export const ChatDrawer: React.FC<{
 
                     {/* 输入区 */}
                     <footer className="mt-auto px-6 pt-3 pb-5">
+                        {awaitingUser && (
+                            <div className="mb-3 px-3 py-2 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+                                <div className="flex items-center gap-2">
+                                    <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
+                                    <span className="text-sm text-blue-700 dark:text-blue-300">
+                                        系统正在等待您的回复...
+                                    </span>
+                                </div>
+                            </div>
+                        )}
                         <div className="flex flex-col bg-brand-surface border border-brand-border rounded-[12px] p-3 h-[104px] transition-all focus-within:border-brand-icon focus-within:shadow-[0_0_0_2px_rgba(140,140,106,0.2)]">
                             <textarea
                                 value={inputMessage}

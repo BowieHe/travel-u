@@ -97,8 +97,8 @@ function generateQuestionForUser(missingRequiredFields: string[], plan: TripPlan
     return summary ? `${summary}\n${followUpMessage}` : followUpMessage;
 }
 
-// 询问用户节点
-const askUserNode = async (state: AgentState): Promise<Partial<AgentState>> => {
+// 询问用户节点 - 在进入 wait_for_user 前设置中断信息
+const askUserNode = (state: AgentState): Partial<AgentState> => {
     console.log('--- 询问用户节点 ---');
     // 若已经有待提问字段列表使用之；否则根据 tripPlan 重新计算
     let missing = state.interactionMissingFields;
@@ -127,18 +127,58 @@ const askUserNode = async (state: AgentState): Promise<Partial<AgentState>> => {
     if (!target) target = sorted[0];
     const question = generateQuestionForUser([target], state.tripPlan || {});
     const updatedAsked = [...asked, target];
+    
+    // 预设中断信息，为即将到来的 wait_for_user 节点准备
+    const interruptId = 'wait_for_user_input'; // 固定的中断ID
+    const interruptInfo = {
+        interrupt_id: interruptId,
+        value: {
+            request_type: 'user_input_needed',
+            message: '请提供更多旅行信息',
+            current_trip_plan: state.tripPlan,
+            missing_fields: missing
+        },
+        when: new Date().toISOString(),
+        resuming: false
+    };
+    
+    console.log('设置中断信息，为 wait_for_user 节点准备:', interruptInfo);
+    
     return {
         interactionMissingFields: missing,
         interactionAskedFields: updatedAsked,
         messages: [new AIMessage({ content: question })],
+        // 预设中断信息
+        interrupts: [interruptInfo],
+        awaiting_user: false
     };
 };
 
-// 等待用户输入节点
-const waitForUserNode = async (_state: AgentState): Promise<Partial<AgentState>> => {
-    interrupt('user_input_needed');
-    // 恢复原行为：清空即时消息，标记等待用户
-    return { messages: [], awaiting_user: true };
+// 等待用户输入节点 - 简化版本，直接调用 interrupt
+const waitForUserNode = (state: AgentState): Partial<AgentState> => {
+    console.log('--- 等待用户输入节点 ---');
+    console.log('当前状态:', {
+        interactionMissingFields: state.interactionMissingFields,
+        tripPlan: state.tripPlan,
+        has_interrupts: !!state.interrupts
+    });
+    
+    // 直接调用 interrupt，使用固定ID
+    const userInput = interrupt({
+        request_type: 'user_input_needed',
+        message: '请提供更多旅行信息',
+        current_trip_plan: state.tripPlan,
+        missing_fields: state.interactionMissingFields
+    });
+    
+    console.log('从 interrupt 收到用户输入:', userInput);
+    
+    // 清除中断信息，添加用户消息
+    return { 
+        messages: [new HumanMessage(userInput)],
+        awaiting_user: false,
+        interrupts: undefined // 清除中断状态
+    };
 };
 
 // // 处理用户回复并提取信息节点
@@ -192,7 +232,7 @@ const userInteractionRouter = (state: AgentState): 'ask_user' | 'complete_intera
 // 移除本地定义，使用从 @/tools/trip-plan 导入的函数
 
 // 完成节点：将收集到的信息传回主图
-const completeInteractionNode = async (state: AgentState): Promise<Partial<AgentState>> => {
+const completeInteractionNode = (state: AgentState): Partial<AgentState> => {
     console.log('--- 完成用户交互 ---');
     return { user_interaction_complete: true, next: 'planner' };
 };

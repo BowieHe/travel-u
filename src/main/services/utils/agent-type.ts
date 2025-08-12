@@ -24,6 +24,14 @@ export type SpecialistNode =
     | 'destination_specialist'
     | 'food_specialist';
 
+// LangGraph interrupt 相关类型定义
+export interface InterruptInfo {
+    interrupt_id: string;
+    value: any;
+    when?: string;
+    resuming?: boolean;
+}
+
 export interface AgentState {
     messages: Array<BaseMessage>;
     next: AgentNode | 'END' | TaskType | UserNode;
@@ -56,6 +64,12 @@ export interface AgentState {
 
     // 标记当前执行因需要用户输入而中断（interrupt）
     awaiting_user?: boolean;
+
+    // === LangGraph 内部字段 ===
+    // LangGraph interrupt 机制使用的字段
+    interrupts?: InterruptInfo[];
+    // LangGraph 元数据字段
+    metadata?: Record<string, any>;
 }
 
 export interface UserInteractionState {
