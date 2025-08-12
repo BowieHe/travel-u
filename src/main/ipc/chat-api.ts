@@ -34,9 +34,10 @@ export class WebChatAPI implements ChatAPI {
     private async openSSE(message: string, resume: boolean) {
         this.closeES();
         try {
-            const url = `/api/chat/sse?message=${encodeURIComponent(message)}${
-                resume ? '&resume=1' : ''
-            }`;
+            // const url = `/api/chat/sse?message=${encodeURIComponent(message)}${
+            //     resume ? '&resume=1' : ''
+            // }`;
+            const url = `/api/chat/sse?message=${encodeURIComponent(message)}`;
             this.eventSource = new EventSource(url);
 
             this.eventSource.addEventListener('chunk', (e: MessageEvent) => {

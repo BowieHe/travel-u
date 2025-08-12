@@ -1,41 +1,24 @@
 import { StateGraph, START, END, interrupt } from '@langchain/langgraph';
 import { graphState } from '../../state/graph-state';
-import { AgentState, TripPlan } from '../../utils/agent-type';
+import { AgentState } from '../../utils/agent-type';
 import { AIMessage, HumanMessage } from '@langchain/core/messages';
 import { DynamicStructuredTool } from '@langchain/core/tools';
 import { createTimeDecodeNode } from './node-relative-time';
 import { createUserResponse } from './user-response';
+import { TripPlan, getMissingField } from '../../tools/trip-plan';
+import { createTripPlanSummaryNode } from '../../agents/trip-plan-summary';
 
-// Helper functions for TripPlan validation
-function isTripPlanComplete(tripPlan: TripPlan): boolean {
-    const requiredFields = ['destination', 'departure', 'startDate'];
-    return requiredFields.every((field) => {
-        const value = (tripPlan as any)[field];
-        return (
-            value !== undefined &&
-            value !== null &&
-            (typeof value !== 'string' || value.trim() !== '')
-        );
-    });
-}
+// function getMissingField(tripPlan: TripPlan): string[] {
+//     const missingFields: string[] = [];
+//     if (!tripPlan.destination) missingFields.push('destination');
+//     if (!tripPlan.departure) missingFields.push('departure');
+//     if (!tripPlan.startDate) missingFields.push('startDate');
+//     if (!tripPlan.endDate) missingFields.push('endDate');
+//     if (tripPlan.budget === undefined || tripPlan.budget === null) missingFields.push('budget');
+//     if (!tripPlan.transportation) missingFields.push('transportation');
 
-function getMissingField(tripPlan: TripPlan): string[] {
-    const missingFields: string[] = [];
-    if (!tripPlan.destination) missingFields.push('destination');
-    if (!tripPlan.departure) missingFields.push('departure');
-    if (!tripPlan.startDate) missingFields.push('startDate');
-    if (!tripPlan.endDate) missingFields.push('endDate');
-    if (tripPlan.budget === undefined || tripPlan.budget === null) missingFields.push('budget');
-    if (!tripPlan.transportation) missingFields.push('transportation');
-
-    return missingFields;
-}
-
-// const startRouter = (_state: AgentState): 'process_response' | 'ask_user' => {
-//     // 进入子图时如果是用户继续回答，直接处理；否则发起提问
-//     const last = _state.messages[_state.messages.length - 1];
-//     return last && last.getType() === 'human' ? 'process_response' : 'ask_user';
-// };
+//     return missingFields;
+// }
 
 // 生成询问用户的消息
 function summarizeCollected(plan: TripPlan): string {
@@ -101,176 +84,54 @@ function generateQuestionForUser(missingRequiredFields: string[], plan: TripPlan
 const askUserNode = (state: AgentState): Partial<AgentState> => {
     console.log('--- 询问用户节点 ---');
     // 若已经有待提问字段列表使用之；否则根据 tripPlan 重新计算
-    let missing = state.interactionMissingFields;
-    if (!missing || missing.length === 0) {
-        missing = getMissingField(state.tripPlan || {});
-    }
-    if (!missing.length) {
-        console.log('无缺失字段，标记交互完成');
-        return { user_interaction_complete: true };
-    }
-    const asked = new Set(state.interactionAskedFields || []);
-    // 选择下一批（这里一次问 1-2 个，优先顺序）
-    const priorityOrder = [
-        'destination',
-        'departure',
-        'startDate',
-        'endDate',
-        'budget',
-        'transportation',
-        'travelers',
-        'preferences',
-    ];
-    const sorted = missing.sort((a, b) => priorityOrder.indexOf(a) - priorityOrder.indexOf(b));
-    // 单字段追问策略：找第一个未问的
-    let target = sorted.find((f) => !asked.has(f));
-    if (!target) target = sorted[0];
-    const question = generateQuestionForUser([target], state.tripPlan || {});
-    const updatedAsked = [...asked, target];
-    
-    // 预设中断信息，为即将到来的 wait_for_user 节点准备
-    const interruptId = 'wait_for_user_input'; // 固定的中断ID
-    const interruptInfo = {
-        interrupt_id: interruptId,
-        value: {
-            request_type: 'user_input_needed',
-            message: '请提供更多旅行信息',
-            current_trip_plan: state.tripPlan,
-            missing_fields: missing
-        },
-        when: new Date().toISOString(),
-        resuming: false
-    };
-    
-    console.log('设置中断信息，为 wait_for_user 节点准备:', interruptInfo);
-    
-    return {
-        interactionMissingFields: missing,
-        interactionAskedFields: updatedAsked,
-        messages: [new AIMessage({ content: question })],
-        // 预设中断信息
-        interrupts: [interruptInfo],
-        awaiting_user: false
-    };
-};
+    // let missing = state.interactionMissingFields;
+    const tripPlan: TripPlan = state.tripPlan || {};
+    const missing = getMissingField(tripPlan);
 
-// 等待用户输入节点 - 简化版本，直接调用 interrupt
-const waitForUserNode = (state: AgentState): Partial<AgentState> => {
-    console.log('--- 等待用户输入节点 ---');
-    console.log('当前状态:', {
-        interactionMissingFields: state.interactionMissingFields,
-        tripPlan: state.tripPlan,
-        has_interrupts: !!state.interrupts
-    });
-    
-    // 直接调用 interrupt，使用固定ID
+    if (!missing || !missing.length) {
+        console.log('无缺失字段，标记交互完成');
+        return { next: 'complete_interaction' };
+    }
+    // todo)) imporve the ask field logic
+    const question = generateQuestionForUser(missing.slice(0, 2), tripPlan);
+
     const userInput = interrupt({
         request_type: 'user_input_needed',
-        message: '请提供更多旅行信息',
+        message: question,
         current_trip_plan: state.tripPlan,
-        missing_fields: state.interactionMissingFields
+        missing_fields: state.interactionMissingFields,
     });
-    
+
     console.log('从 interrupt 收到用户输入:', userInput);
-    
-    // 清除中断信息，添加用户消息
-    return { 
-        messages: [new HumanMessage(userInput)],
-        awaiting_user: false,
-        interrupts: undefined // 清除中断状态
+    return {
+        messages: [new AIMessage({ content: question }), new HumanMessage({ content: userInput })],
+        next: 'process_response',
+        // interactionAskedFields: updatedAsked,
     };
 };
-
-// // 处理用户回复并提取信息节点
-// const processUserResponseNode = async (
-// 	state: AgentState
-// ): Promise<Partial<AgentState>> => {
-// 	console.log("--- 处理用户回复 ---");
-
-// 	try {
-// 		// 使用 extractAndUpdateTravelPlan 来提取和更新信息
-// 		const result = await extractAndUpdateTravelPlan(state);
-
-// 		// 检查是否获得了所有必需信息
-// 		const updatedTripPlan = result.tripPlan;
-// 		const isComplete = updatedTripPlan
-// 			? isTripPlanComplete(updatedTripPlan)
-// 			: false;
-
-// 		console.log("提取结果:", {
-// 			tripPlan: updatedTripPlan,
-// 			isComplete: isComplete,
-// 		});
-
-// 		return {
-// 			...result,
-// 			user_interaction_complete: isComplete,
-// 		};
-// 	} catch (error: any) {
-// 		console.error("处理用户回复时出错:", error);
-// 		return {
-// 			errorMessage: `处理用户回复失败: ${error.message}`,
-// 			user_interaction_complete: false,
-// 		};
-// 	}
-// };
-
-// 路由器：决定是继续询问还是结束
-const userInteractionRouter = (state: AgentState): 'ask_user' | 'complete_interaction' => {
-    // 如果所有必需字段齐全 或 interactionMissingFields 为空
-    const tripPlan = state.tripPlan || {};
-    const requiredMissing = getMissingField(tripPlan as TripPlan).filter((f) =>
-        ['destination', 'departure', 'startDate'].includes(f)
-    );
-    if (requiredMissing.length === 0) {
-        return 'complete_interaction';
-    }
-    return 'ask_user';
-};
-
-// 新增：将 tripPlan 信息转换为 memory 格式的函数
-// 移除本地定义，使用从 @/tools/trip-plan 导入的函数
 
 // 完成节点：将收集到的信息传回主图
 const completeInteractionNode = (state: AgentState): Partial<AgentState> => {
     console.log('--- 完成用户交互 ---');
-    return { user_interaction_complete: true, next: 'planner' };
+    return { next: 'planner' };
 };
 
 export function createUserInteractionSubgraph(tools: DynamicStructuredTool[]) {
-    const relativeTimeNode = createTimeDecodeNode(tools);
-    const userResponseNode = createUserResponse();
+    const userResponseNode = createTripPlanSummaryNode();
 
     const subgraph = new StateGraph<AgentState>({
         channels: graphState,
     })
         .addNode('ask_user', askUserNode)
-        .addNode('wait_for_user', waitForUserNode)
-        .addNode('relative_time', relativeTimeNode)
         .addNode('process_response', userResponseNode)
         .addNode('complete_interaction', completeInteractionNode)
 
-        // 开始路由：根据消息类型决定流向
-        // .addConditionalEdges(START, startRouter, {
-        //     ask_user: 'ask_user',
-        //     process_response: 'relative_time',
-        // })
         .addEdge(START, 'ask_user')
-
-        // 询问用户 -> 等待输入
-        .addEdge('ask_user', 'wait_for_user')
-
-        // 等待输入 -> 时间处理
-        .addEdge('wait_for_user', 'relative_time')
-
-        // 时间处理 -> 响应处理
-        .addEdge('relative_time', 'process_response')
-
-        // 条件边：根据信息完整性决定是继续询问还是完成交互
-        .addConditionalEdges('process_response', userInteractionRouter, {
-            ask_user: 'ask_user',
+        .addConditionalEdges('ask_user', (state) => state.next, {
+            process_response: 'process_response',
             complete_interaction: 'complete_interaction',
         })
+        .addEdge('process_response', 'ask_user')
 
         // 完成交互后结束子图
         .addEdge('complete_interaction', END);

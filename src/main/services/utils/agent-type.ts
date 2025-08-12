@@ -1,5 +1,6 @@
 import { BaseMessage } from '@langchain/core/messages';
 import { AnyExpertTask, TaskType } from '../utils/task-type';
+import { TripPlan } from '../tools/trip-plan';
 
 export type AgentNode =
     | 'orchestrator'
@@ -34,7 +35,7 @@ export interface InterruptInfo {
 
 export interface AgentState {
     messages: Array<BaseMessage>;
-    next: AgentNode | 'END' | TaskType | UserNode;
+    next: AgentNode | 'END' | TaskType | UserNode | 'complete_interaction' | 'process_response'; // for user-interaction graph
 
     tripPlan?: TripPlan;
     // for subtasks
@@ -45,11 +46,6 @@ export interface AgentState {
 
     errorMessage?: string;
 
-    // userInteractionState?: UserInteractionState;
-
-    // 用户交互是否完成
-    user_interaction_complete?: boolean;
-
     // 计划/任务列表
     planTodos?: PlanTodo[];
 
@@ -59,17 +55,6 @@ export interface AgentState {
     // === 用户交互收集缺失字段支持 ===
     // 当前仍缺失需要向用户询问的字段列表（来自路由的 missing_fields 或动态更新）
     interactionMissingFields?: string[];
-    // 已经询问过的字段，避免重复提问
-    interactionAskedFields?: string[];
-
-    // 标记当前执行因需要用户输入而中断（interrupt）
-    awaiting_user?: boolean;
-
-    // === LangGraph 内部字段 ===
-    // LangGraph interrupt 机制使用的字段
-    interrupts?: InterruptInfo[];
-    // LangGraph 元数据字段
-    metadata?: Record<string, any>;
 }
 
 export interface UserInteractionState {
@@ -82,58 +67,6 @@ export interface UserInteractionState {
     interactionOutcome?: Outcome;
     // 提取的信息（返回给主图）
     extractedInfo?: Record<string, string>;
-}
-
-export interface TripPlan {
-    destination?: string | null;
-    // Added for alignment with trip-plan tool schema
-    departure?: string | null; // 出发城市
-    startDate?: string | null;
-    endDate?: string | null;
-    budget?: number | null;
-    travelers?: number | null;
-    preferences?: string[] | null;
-    itinerary?: ItineraryItem[] | null;
-    transportation?: string | null; // 用户明确的交通方式（不推断）
-}
-
-export interface ItineraryItem {
-    day: number;
-    date: string;
-    activities: Activity[];
-    transportation?: Transportation;
-    accommodation?: Accommodation;
-}
-
-export interface Activity {
-    time: string;
-    title: string;
-    description: string;
-    location: string;
-    cost?: number;
-    duration?: number;
-    type: 'sightseeing' | 'dining' | 'entertainment' | 'shopping' | 'transportation' | 'other';
-}
-
-export interface Transportation {
-    type: 'flight' | 'train' | 'bus' | 'car' | 'taxi' | 'subway' | 'walking';
-    from: string;
-    to: string;
-    departureTime?: string;
-    arrivalTime?: string;
-    cost?: number;
-    duration?: number;
-    details?: string;
-}
-
-export interface Accommodation {
-    name: string;
-    type: 'hotel' | 'hostel' | 'apartment' | 'bnb' | 'other';
-    location: string;
-    checkIn: string;
-    checkOut: string;
-    cost?: number;
-    rating?: number;
 }
 
 export interface PlanTodo {

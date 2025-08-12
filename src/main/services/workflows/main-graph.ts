@@ -11,7 +11,7 @@ import { createSafeSpecialistAgent } from '../agents/specialist';
 import { graphState } from '../state/graph-state';
 import { createUserInteractionSubgraph } from './user-interaction/graph';
 import { createRouterNode } from '../agents/orchestrator';
-import { createDirectAnswerNode } from '../agents/directAnswer';
+import { createDirectAnswerNode } from '../agents/direct-answer';
 import { createPlannerNode } from '../agents/planner';
 import { createTripPlanSummaryNode } from '../agents/trip-plan-summary';
 

@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { DeepSeek } from '../models/deepseek';
-import { AgentState, TripPlan } from '../utils/agent-type';
+import { AgentState } from '../utils/agent-type';
+import { getMissingField, TripPlan } from '../tools/trip-plan';
 import { SystemMessage } from '@langchain/core/messages';
 import { parseSchema } from '../utils/tool';
 

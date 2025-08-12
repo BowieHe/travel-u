@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { parseSchema } from './tool';
 import { tripPlanSchema } from '../agents/trip-plan-summary';
-import { TripPlan } from '../utils/agent-type';
+// import { TripPlan } from '../utils/agent-type';
+import { TripPlan } from '../tools/trip-plan';
 
 describe('parseSchema', () => {
     it('should parse valid JSON string', () => {

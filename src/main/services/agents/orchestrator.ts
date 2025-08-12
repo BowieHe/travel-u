@@ -134,7 +134,6 @@ export const createRouterNode = () => {
             const existing = state.tripPlan || {};
             const missing = (routing.missing_fields || []).filter((f) => !(existing as any)[f]);
             partial.interactionMissingFields = missing;
-            partial.interactionAskedFields = [];
         }
         return partial;
     };

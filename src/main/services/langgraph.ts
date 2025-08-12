@@ -1,6 +1,5 @@
 import { BaseMessage, HumanMessage } from '@langchain/core/messages';
 import { initializeGraph } from './workflows/main-graph';
-import { AgentState } from './utils/agent-type';
 import { Command } from '@langchain/langgraph';
 
 /**
@@ -58,48 +57,17 @@ export class LangGraphService {
         }
 
         const config = { configurable: { thread_id: sessionId } };
-        
+
         try {
             // 检查图的当前状态
             const graphState = await this.graph.getState(config);
-            console.log('Graph state check:', {
-                has_next: graphState?.next && graphState.next.length > 0,
-                next_nodes: graphState?.next || [],
-                is_completed: !graphState?.next || graphState?.next.length === 0,
-                has_values: !!graphState?.values,
-                stored_interrupts: graphState?.values?.interrupts // 检查存储的中断信息
-            });
-
             let input: any;
-            const hasNext = graphState?.next && graphState.next.length > 0;
-            
-            if (hasNext) {
-                console.log('Detected graph interruption, attempting to resume...');
-                console.log('Next nodes:', graphState?.next);
-                
-                // 根据 next 节点硬编码 interrupt ID
-                const nextNodes = graphState.next;
-                if (nextNodes.includes('wait_for_user')) {
-                    // 如果下一个节点是 wait_for_user，使用固定的 interrupt ID
-                    const resumeMap = {
-                        'wait_for_user_input': message  // 硬编码的固定 ID
-                    };
-                    
-                    input = new Command({ resume: resumeMap });
-                    console.log('Using hardcoded resumeMap for wait_for_user:', resumeMap);
-                } else if (graphState?.values?.interrupts && graphState.values.interrupts.length > 0) {
-                    // 如果有存储的中断信息，使用它们
-                    const resumeMap: Record<string, any> = {};
-                    for (const interrupt of graphState.values.interrupts) {
-                        resumeMap[interrupt.interrupt_id] = message;
-                        console.log(`Using stored interrupt ${interrupt.interrupt_id}`);
-                    }
-                    input = new Command({ resume: resumeMap });
-                } else {
-                    // 其他情况使用简单的 resume
-                    input = new Command({ resume: true });
-                    console.log('Using simple resume for other nodes');
-                }
+
+            if (graphState.tasks && graphState.tasks.length > 0 && graphState.tasks[0].interrupts) {
+                const interrupts = graphState.tasks[0].interrupts;
+                console.log('Current interrupts:', interrupts);
+
+                input = new Command({ resume: message });
             } else {
                 console.log('Starting new conversation...');
                 input = {
@@ -110,40 +78,47 @@ export class LangGraphService {
 
             const stream = await this.graph.stream(input, {
                 ...config,
-                streamMode: 'messages',
+                streamMode: ['messages', 'updates'],
             });
 
             let lastContent: string | null = null;
-            let awaiting = false;
 
             for await (const item of stream) {
                 if (Array.isArray(item)) {
-                    const msg = item[0] as BaseMessage;
-                    if (!msg) continue;
-                    
-                    let content: any = (msg as any).content;
-                    if (Array.isArray(content)) {
-                        content = content
-                            .map((c: any) => (typeof c === 'string' ? c : c?.text || ''))
-                            .join('');
-                    }
-                    if (typeof content !== 'string') continue;
-                    
-                    const text = content.trim();
-                    if (!text) continue;
-                    if (text === message.trim()) continue; // 跳过用户输入回显
-                    if (lastContent && lastContent === text) continue; // 去重
-                    
-                    lastContent = text;
-                    yield text;
-                } else if (item && typeof item === 'object') {
-                    const state = item as AgentState;
-                    if ((state as any).awaiting_user) awaiting = true;
-                }
-            }
+                    const [mode, data] = item.length === 2 ? item : ['messages', item];
 
-            if (awaiting) {
-                yield JSON.stringify({ type: 'interrupt', code: 'user_input_needed' });
+                    if (mode === 'messages') {
+                        const msgArr = Array.isArray(data) ? data : [data];
+                        const msg = msgArr[0] as BaseMessage;
+                        // todo)) might could be deleted
+                        let content: any = (msg as any).content;
+                        if (Array.isArray(content)) {
+                            content = content
+                                .map((c: any) => (typeof c === 'string' ? c : c?.text || ''))
+                                .join('');
+                        }
+
+                        const text = content.trim();
+                        if (!text) continue;
+                        if (text === message.trim()) continue; // 跳过用户输入回显
+                        if (lastContent && lastContent === text) continue; // 去重
+
+                        lastContent = text;
+                        yield text;
+                    } else {
+                        // mode == update
+                        // so far. only used to show interruption message, could be other node name if future
+                        if (data.__interrupt__) {
+                            // is interrupt
+                            const message = data.__interrupt__[0].value.message;
+                            if (message) {
+                                yield message;
+                            }
+                        }
+                    }
+                } else if (item && typeof item === 'object') {
+                    console.warn('item is object', item);
+                }
             }
         } catch (e: any) {
             // 检查是否是中断异常
@@ -154,18 +129,6 @@ export class LangGraphService {
                 console.error('执行图时异常:', e);
                 yield JSON.stringify({ error: 'EXECUTION_ERROR', message: e.message });
             }
-        }
-    }
-
-    /**
-     * Resume 方法 - 简化版本
-     */
-    async resumeMessage(message: string, sessionId = 'default'): Promise<void> {
-        // 复用 streamMessage，但不返回生成器
-        const stream = this.streamMessage(message, sessionId);
-        for await (const chunk of stream) {
-            // 这里可以处理输出，但主要目的是触发恢复
-            console.log('Resume output chunk:', chunk);
         }
     }
 }

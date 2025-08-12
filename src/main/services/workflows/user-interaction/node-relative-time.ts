@@ -1,11 +1,11 @@
-import { DeepSeek } from "../../models/deepseek";
-import { AgentState } from "../../utils/agent-type";
-import { SystemMessage, ToolMessage } from "@langchain/core/messages";
-import { DynamicStructuredTool } from "@langchain/core/tools";
+import { DeepSeek } from '../../models/deepseek';
+import { AgentState } from '../../utils/agent-type';
+import { SystemMessage, ToolMessage } from '@langchain/core/messages';
+import { DynamicStructuredTool } from '@langchain/core/tools';
 
 export const createTimeDecodeNode = (tools: DynamicStructuredTool[]) => {
     const llm = new DeepSeek();
-    const model = llm.llm("deepseek-chat").bindTools(tools);
+    const model = llm.llm('deepseek-chat').bindTools(tools);
 
     const prompt = `你是一个时间语义解析专家。请严格按照以下规则处理用户输入中的相对时间表达：
 
@@ -52,25 +52,25 @@ export const createTimeDecodeNode = (tools: DynamicStructuredTool[]) => {
                 }
                 const toolResult = await tool.func(toolCall.args);
                 const toolMessage = new ToolMessage({
-                    tool_call_id: toolCall.id ?? "",
+                    tool_call_id: toolCall.id ?? '',
                     name: toolCall.name, // 添加 name 字段，这是 Gemini 模型必需的
                     content: toolResult,
                 });
                 return {
                     messages: [...state.messages, response, toolMessage], // 保持完整的消息历史
-                    next: "process_response", // 继续处理用户回复
+                    next: 'process_response', // 继续处理用户回复
                 };
             }
             // Always return a Partial<AgentState> if no tool calls are found
             return {
                 messages: state.messages,
-                next: "process_response",
+                next: 'process_response',
             };
         } catch (error) {
-            console.error("时间表达式提取失败:", error);
+            console.error('时间表达式提取失败:', error);
             return {
                 errorMessage: `时间表达式提取失败`,
-                user_interaction_complete: false,
+                // user_interaction_complete: false,
             };
         }
     };
