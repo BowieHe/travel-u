@@ -86,7 +86,7 @@ export const initializeGraph = async () => {
         .addNode('direct_answer', directNode)
         .addNode('planner', plannerNode)
         // .addNode('orchestrator', orchestrator) // legacy combined node (still available if needed)
-        .addNode('ask_user', askUserNode)
+        .addNode('ask_subgraph', askUserNode)
         .addNode('trip_plan_summary', tripPlanSummaryNode)
         .addNode('agent_placeholder', agentPlaceholder)
         .addEdge(START, 'router')
@@ -99,9 +99,9 @@ export const initializeGraph = async () => {
         .addEdge('direct_answer', END)
         .addEdge('planner', END)
         // trip_plan_summary 完成后进入 ask_user
-        .addEdge('trip_plan_summary', 'ask_user')
+        .addEdge('trip_plan_summary', 'ask_subgraph')
         // ask_user 完成后进入 planner
-        .addEdge('ask_user', 'planner')
+        .addEdge('ask_subgraph', 'planner')
         .addEdge('agent_placeholder', END);
     // .addEdge('planner', 'orchestrator') // 如果想在 planner 后再交由 orchestrator 二次处理，可启用
     // .addEdge('direct_answer', 'orchestrator')

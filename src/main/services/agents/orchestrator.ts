@@ -131,7 +131,7 @@ export const createRouterNode = () => {
         const memory = { ...(state.memory || {}), routing };
         const partial: Partial<AgentState> = { memory, next };
         if (routing.decision === 'missingField') {
-            const existing = state.tripPlan || {};
+            const existing = state.tripInfo || {};
             const missing = (routing.missing_fields || []).filter((f) => !(existing as any)[f]);
             partial.interactionMissingFields = missing;
         }

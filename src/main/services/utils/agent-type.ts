@@ -1,6 +1,6 @@
 import { BaseMessage } from '@langchain/core/messages';
 import { AnyExpertTask, TaskType } from '../utils/task-type';
-import { TripPlan } from '../tools/trip-plan';
+import { TripInfo } from '../tools/trip-plan';
 
 export type AgentNode =
     | 'orchestrator'
@@ -16,7 +16,12 @@ export type AgentNode =
     | 'ask_user'
     | 'trip_plan_summary';
 
-export type UserNode = 'ask_user' | 'process_response' | 'reletive_time';
+export type UserNode = 'ask_user' | 'process_response' | 'reletive_time' | 'wait_for_user';
+export type UserInteractionNode =
+    | 'complete_interaction'
+    | 'process_response'
+    | 'wait_user'
+    | 'ask_user';
 
 type Outcome = 'success' | 'reprompt' | 'cancel';
 
@@ -35,9 +40,9 @@ export interface InterruptInfo {
 
 export interface AgentState {
     messages: Array<BaseMessage>;
-    next: AgentNode | 'END' | TaskType | UserNode | 'complete_interaction' | 'process_response'; // for user-interaction graph
+    next: AgentNode | 'END' | TaskType | UserNode | UserInteractionNode;
 
-    tripPlan?: TripPlan;
+    tripInfo?: TripInfo;
     // for subtasks
     subtask: Array<AnyExpertTask>;
     currentTaskIndex: number;
@@ -76,7 +81,7 @@ export interface PlanTodo {
     priority?: 'low' | 'medium' | 'high';
     category?: 'transportation' | 'accommodation' | 'activity' | 'research' | 'booking' | 'other';
     estimatedTime?: number; // minutes
-    deadline?: string;
-    dependencies?: string[]; // array of todo IDs this depends on
+    // deadline?: string;
+    // dependencies?: string[]; // array of todo IDs this depends on
     assignedTo?: string; // which specialist/agent should handle this
 }

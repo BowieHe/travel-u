@@ -3,7 +3,7 @@ import { z } from 'zod';
 export const TransportationEnum = z.enum(['flight', 'train', 'car']);
 export type TransportationType = z.infer<typeof TransportationEnum>;
 
-export interface TripPlan {
+export interface TripInfo {
     destination?: string | null;
     // Added for alignment with trip-plan tool schema
     departure?: string | null; // 出发城市
@@ -15,6 +15,18 @@ export interface TripPlan {
     itinerary?: ItineraryItem[] | null;
     transportation?: string | null; // 用户明确的交通方式（不推断）
 }
+
+export const emptyTripPlan: TripInfo = {
+    destination: null,
+    departure: null,
+    startDate: null,
+    endDate: null,
+    budget: null,
+    travelers: null,
+    preferences: null,
+    itinerary: null,
+    transportation: null,
+};
 
 export interface ItineraryItem {
     day: number;
@@ -59,7 +71,7 @@ export interface Accommodation {
 /**
 @deprecated no longer used
 */
-export function mergeTripPlan(current: TripPlan, newPart: Partial<TripPlan>): TripPlan {
+export function mergeTripPlan(current: TripInfo, newPart: Partial<TripInfo>): TripInfo {
     const merged = { ...current };
 
     for (const key in newPart) {
@@ -143,7 +155,7 @@ export const tripPlanSchema = z.object({
     transportation: z.string().nullable().describe('用户明确提到的交通方式。'),
 });
 
-export function getMissingField(tripPlan: TripPlan): string[] {
+export function getMissingField(tripPlan: TripInfo): string[] {
     const missingFields: string[] = [];
     if (!tripPlan.destination) missingFields.push('destination');
     if (!tripPlan.departure) missingFields.push('departure');

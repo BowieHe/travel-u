@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { parseSchema } from './tool';
-import { tripPlanSchema } from '../agents/trip-plan-summary';
+import { tripPlanSchema } from '../tools/trip-plan';
 // import { TripPlan } from '../utils/agent-type';
-import { TripPlan } from '../tools/trip-plan';
+import { TripInfo } from '../tools/trip-plan';
 
 describe('parseSchema', () => {
     it('should parse valid JSON string', () => {
@@ -31,7 +31,7 @@ describe('parseSchema', () => {
             itinerary: null,
             transportation: null,
         });
-        expect(result as TripPlan).toBeTruthy();
+        expect(result as TripInfo).toBeTruthy();
     });
 
     it('should return default object if parsing fails', () => {

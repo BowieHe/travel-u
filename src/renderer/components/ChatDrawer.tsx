@@ -25,21 +25,21 @@ interface Message {
 
 //todo)) delete later
 const mockMessages: Message[] = [
-    {
-        id: 'a1',
-        content: '你好！',
-        sender: 'user',
-        timestamp: new Date(),
-        isLoading: true,
-    },
-    {
-        id: 'a2',
-        content:
-            '{"thinking":"用户只是打招呼，可以直接回复，无需复杂规划。","direct_answer":"您好！我是您的旅行助手。有什么可以帮助您的吗？","plan":[]}',
-        sender: 'ai',
-        timestamp: new Date(),
-        isLoading: true,
-    },
+    // {
+    //     id: 'a1',
+    //     content: '你好！',
+    //     sender: 'user',
+    //     timestamp: new Date(),
+    //     isLoading: true,
+    // },
+    // {
+    //     id: 'a2',
+    //     content:
+    //         '{"thinking":"用户只是打招呼，可以直接回复，无需复杂规划。","direct_answer":"您好！我是您的旅行助手。有什么可以帮助您的吗？","plan":[]}',
+    //     sender: 'ai',
+    //     timestamp: new Date(),
+    //     isLoading: true,
+    // },
 ];
 // 对话抽屉组件 - 完全基于HTML原型重新设计
 export const ChatDrawer: React.FC<{
@@ -142,7 +142,7 @@ export const ChatDrawer: React.FC<{
                 );
                 chatAPI.cleanup();
             });
-            
+
             // 简化：始终使用 streamMessage，它内部会自动处理 resume 逻辑
             console.log('Sending message (auto-resume if needed):', currentMessage);
             if (awaitingUser) {

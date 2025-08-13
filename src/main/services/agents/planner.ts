@@ -93,16 +93,16 @@ export const createPlannerNode = () => {
             parsed = { direct_answer: '暂时无法生成结构化计划，请稍后重试。', plan: [] };
         }
 
-        // 确保 plan 非空（若模型没遵守，进行最小自我修复）
-        if (!parsed.plan || parsed.plan.length === 0) {
-            parsed.plan = [
-                {
-                    description: '细化用户需求（天数/偏好）后重新生成计划',
-                    category: 'research',
-                    priority: 'high',
-                },
-            ];
-        }
+        // // 确保 plan 非空（若模型没遵守，进行最小自我修复）
+        // if (!parsed.plan || parsed.plan.length === 0) {
+        //     parsed.plan = [
+        //         {
+        //             description: '细化用户需求（天数/偏好）后重新生成计划',
+        //             category: 'research',
+        //             priority: 'high',
+        //         },
+        //     ];
+        // }
 
         return { messages: [new AIMessage({ content: JSON.stringify(parsed) })] };
     };

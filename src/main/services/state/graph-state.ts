@@ -53,7 +53,7 @@ export const graphState: StateGraphArgs<AgentState>['channels'] = {
     //     value: (x?: UserInteractionState, y?: UserInteractionState) => y ?? x,
     //     default: () => undefined,
     // },
-    tripPlan: {
+    tripInfo: {
         value: (x, y) => y,
         default: () => ({}),
     },
