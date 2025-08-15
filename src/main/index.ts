@@ -3,7 +3,7 @@ import * as dotenv from 'dotenv';
 import * as path from 'path';
 import { createWindow, cleanupWindow } from './window';
 import { McpService } from './services/mcp/mcp';
-import appServer from './web-server'; // 启动内嵌 express (web-server.ts 已在其模块底部启动)
+import { startServer } from './web-server'; // 显式启动内嵌 Web API 服务器
 
 // 加载环境变量
 dotenv.config({ path: path.join(__dirname, '../../.env') });
@@ -17,10 +17,17 @@ let mainWindow: BrowserWindow;
 async function main() {
     await app.whenReady();
 
-    // 1. 立即创建窗口（SSE 直接访问内嵌 web server）
+    // 1. 启动内嵌 Web API 服务器 (SSE 所需)
+    try {
+        await startServer();
+    } catch (err) {
+        console.error('启动内嵌 Web 服务器失败:', err);
+    }
+
+    // 2. 创建窗口（SSE 直接访问内嵌 web server）
     mainWindow = createWindow();
 
-    // 2. 后台异步初始化 MCP Client（不阻塞界面）
+    // 3. 后台异步初始化 MCP Client（不阻塞界面）
     initializeMcpClient().catch((error) => {
         console.error('后台初始化 MCP Client 失败:', error);
     });

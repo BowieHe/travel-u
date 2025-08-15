@@ -14,7 +14,12 @@ const port = process.env.WEB_PORT || 3001;
 // 中间件
 app.use(
     cors({
-        origin: ['http://localhost:3000', 'http://127.0.0.1:3000'],
+        origin: [
+            'http://localhost:3000',
+            'http://127.0.0.1:3000',
+            'http://localhost:5173',
+            'http://127.0.0.1:5173',
+        ],
         credentials: true,
     })
 );
@@ -54,7 +59,7 @@ app.get('/', (req, res) => {
 /**
  * 初始化所有必要的服务
  */
-async function initializeServices() {
+export async function initializeServices() {
     try {
         console.log('🚀 初始化服务...');
 
@@ -82,20 +87,24 @@ async function initializeServices() {
 /**
  * 启动 Web 服务器
  */
-async function startServer() {
-    try {
-        await initializeServices();
+export async function startServer() {
+    // 先启动监听，避免前端一开始就连接被拒绝
+    const server = app.listen(port, () => {
+        console.log(`🌐 Web 服务器启动成功!`);
+        console.log(`📍 服务器地址: http://localhost:${port}`);
+        console.log(`💬 聊天 SSE API: http://localhost:${port}/api/chat/sse`);
+        console.log(`🏥 健康检查: http://localhost:${port}/api/health`);
+    });
+    server.on('error', (err: any) => {
+        console.error('HTTP 服务器错误:', err?.code || err);
+    });
 
-        app.listen(port, () => {
-            console.log(`🌐 Web 服务器启动成功!`);
-            console.log(`📍 服务器地址: http://localhost:${port}`);
-            console.log(`💬 聊天 SSE API: http://localhost:${port}/api/chat/sse`);
-            console.log(`🏥 健康检查: http://localhost:${port}/api/health`);
-        });
-    } catch (error) {
-        console.error('❌ 服务器启动失败:', error);
-        process.exit(1);
-    }
+    // 后台初始化服务
+    initializeServices().catch((error) => {
+        console.error('❌ 服务初始化失败（服务器已在监听）:', error);
+    });
+
+    return server;
 }
 
 // 优雅关闭
