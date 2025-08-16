@@ -61,7 +61,7 @@ export const USER_ASK_PROMPT = `
 - 输入：{ destination: "厦门", travelers: 2 }
   输出：
   已知：目的地：厦门；人数：2
-  预计出发与返程日期是哪天（YYYY-MM-DD）？
+  预计出发与返程日期是哪天？
 - 输入：{ destination: "重庆", startDate: "2025-08-30", endDate: "2025-09-02", travelers: 4, budget: null, transportation: null }
   输出：
   已知：目的地：重庆；日期：2025-08-30~2025-09-02；人数：4

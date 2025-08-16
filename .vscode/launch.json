@@ -5,8 +5,43 @@
             "type": "node",
             "request": "launch",
             "name": "Debug Electron Main Process",
-            "program": "${workspaceFolder}/src/main/index.ts",
-            "runtimeExecutable": "electron",
+            "program": "${workspaceFolder}/out/main/index.js",
+            "runtimeExecutable": "${workspaceFolder}/node_modules/.bin/electron",
+            "cwd": "${workspaceFolder}",
+            "env": {
+                "NODE_ENV": "development"
+            },
+            "sourceMaps": true,
+            "console": "integratedTerminal",
+            "skipFiles": ["<node_internals>/**"],
+            "preLaunchTask": "Build All"
+        },
+        {
+            "type": "node",
+            "request": "launch",
+            "name": "Debug Electron Dev (with auto-reload)",
+            "runtimeExecutable": "${workspaceFolder}/node_modules/.bin/electron-vite",
+            "runtimeArgs": ["dev"],
+            "cwd": "${workspaceFolder}",
+            "env": {
+                "NODE_ENV": "development"
+            },
+            "console": "integratedTerminal",
+            "skipFiles": ["<node_internals>/**"]
+        },
+        {
+            "type": "node",
+            "request": "attach",
+            "name": "Attach to Electron Main",
+            "port": 9229,
+            "restart": true,
+            "skipFiles": ["<node_internals>/**"]
+        },
+        {
+            "type": "node",
+            "request": "launch",
+            "name": "Debug Node.js - LangGraph Service",
+            "program": "${workspaceFolder}/src/main/services/langgraph.ts",
             "runtimeArgs": [
                 "-r",
                 "dotenv/config",
@@ -22,6 +57,44 @@
             "sourceMaps": true,
             "console": "integratedTerminal",
             "skipFiles": ["<node_internals>/**"]
+        },
+        {
+            "type": "node",
+            "request": "launch",
+            "name": "Debug Node.js - Test Script",
+            "program": "${file}",
+            "runtimeArgs": [
+                "-r",
+                "dotenv/config",
+                "-r",
+                "ts-node/register",
+                "-r",
+                "tsconfig-paths/register"
+            ],
+            "cwd": "${workspaceFolder}",
+            "env": {
+                "NODE_ENV": "development"
+            },
+            "sourceMaps": true,
+            "console": "integratedTerminal",
+            "skipFiles": ["<node_internals>/**"]
+        },
+        {
+            "type": "node",
+            "request": "launch",
+            "name": "Debug Electron Main with Inspect",
+            "runtimeExecutable": "${workspaceFolder}/node_modules/.bin/electron",
+            "runtimeArgs": [
+                "--inspect=9229",
+                "${workspaceFolder}/out/main/index.js"
+            ],
+            "cwd": "${workspaceFolder}",
+            "env": {
+                "NODE_ENV": "development"
+            },
+            "console": "integratedTerminal",
+            "skipFiles": ["<node_internals>/**"],
+            "preLaunchTask": "Build All"
         }
     ]
 }

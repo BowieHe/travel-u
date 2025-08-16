@@ -1,6 +1,7 @@
 import { AIMessage, SystemMessage } from '@langchain/core/messages';
 import { DeepSeek } from '../models/deepseek';
 import { AgentState } from '../utils/agent-type';
+import { Gemini } from '../models/gemini';
 
 // Prompt for planner mode; generate multi-step travel plan tasks in markdown format.
 const PLANNER_PROMPT = `你是一个旅行规划助手，当前模式: 规划 (planner)。
@@ -59,8 +60,11 @@ const PLANNER_PROMPT = `你是一个旅行规划助手，当前模式: 规划 (p
 现在开始：`;
 
 export const createPlannerNode = () => {
-    const llm = new DeepSeek();
-    const model = llm.llm('deepseek-chat');
+
+
+    const model = new Gemini().llm('gemini-2.5-pro');
+    // const llm = new DeepSeek();
+    // const model = llm.llm('deepseek-reasoner');
 
     return async (state: AgentState): Promise<Partial<AgentState>> => {
         const system = new SystemMessage({ content: PLANNER_PROMPT });

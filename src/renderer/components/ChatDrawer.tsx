@@ -182,30 +182,31 @@ export const ChatDrawer: React.FC<{
             thinking: '',
             answer: '',
             plan: '',
-            current: 'answer' // 默认类型
+            current: 'answer', // 默认类型
         };
-        
+
         // 尝试解析JSON格式（向后兼容）
         try {
             const parsed = JSON.parse(content);
             if (typeof parsed === 'object' && parsed) {
                 result.thinking = parsed.thinking || '';
                 result.answer = parsed.direct_answer || '';
-                result.plan = parsed.plan ? 
-                    parsed.plan.map((item: any) => `- [ ] ${item.description || item}`).join('\n') : '';
+                result.plan = parsed.plan
+                    ? parsed.plan.map((item: any) => `- [ ] ${item.description || item}`).join('\n')
+                    : '';
                 return result;
             }
         } catch {
             // 不是JSON，继续markdown解析
         }
-        
+
         // 分段解析markdown
         const sections = content.split(/^## (🤔 思考|📝 回答|📋 计划)/m);
-        
+
         for (let i = 1; i < sections.length; i += 2) {
             const sectionType = sections[i];
             const sectionContent = (sections[i + 1] || '').trim();
-            
+
             if (sectionType.includes('思考')) {
                 result.thinking = sectionContent;
                 result.current = 'thinking';
@@ -217,12 +218,12 @@ export const ChatDrawer: React.FC<{
                 result.current = 'plan';
             }
         }
-        
+
         // 如果没有明确section，归到answer
         if (!result.thinking && !result.answer && !result.plan) {
             result.answer = content;
         }
-        
+
         return result;
     };
 
@@ -260,7 +261,7 @@ export const ChatDrawer: React.FC<{
                     📋 计划
                 </div>
                 <div className="plan-content markdown-body">
-                    <ReactMarkdown 
+                    <ReactMarkdown
                         components={{
                             // 自定义复选框渲染
                             input: ({ type, checked, ...props }) => {
@@ -279,7 +280,7 @@ export const ChatDrawer: React.FC<{
                             },
                             // 自定义列表项渲染
                             li: ({ children, ...props }) => (
-                                <li 
+                                <li
                                     className="flex items-start gap-2 rounded-lg bg-white/60 dark:bg-white/10 border border-brand-divider/50 px-2 py-1.5 text-[13px] leading-snug backdrop-blur-sm mb-1"
                                     {...props}
                                 >
@@ -293,16 +294,22 @@ export const ChatDrawer: React.FC<{
                             ),
                             // 自定义强调文本渲染
                             strong: ({ children, ...props }) => (
-                                <strong className="font-semibold text-gray-800 dark:text-gray-200" {...props}>
+                                <strong
+                                    className="font-semibold text-gray-800 dark:text-gray-200"
+                                    {...props}
+                                >
                                     {children}
                                 </strong>
                             ),
                             // 自定义引用块渲染
                             blockquote: ({ children, ...props }) => (
-                                <blockquote className="border-l-4 border-blue-400 pl-4 italic text-gray-600 dark:text-gray-400 my-2" {...props}>
+                                <blockquote
+                                    className="border-l-4 border-blue-400 pl-4 italic text-gray-600 dark:text-gray-400 my-2"
+                                    {...props}
+                                >
                                     {children}
                                 </blockquote>
-                            )
+                            ),
                         }}
                     >
                         {content}
@@ -384,10 +391,7 @@ export const ChatDrawer: React.FC<{
                                     // AI消息使用分段式渲染
                                     const sections = parseStreamingSections(message.content);
                                     return (
-                                        <div
-                                            key={message.id}
-                                            className="flex gap-3 max-w-[85%]"
-                                        >
+                                        <div key={message.id} className="flex gap-3 max-w-[85%]">
                                             <div className="group relative rounded-2xl px-4 py-3 shadow-sm transition-all animate-chat-in bg-travel-light/90 border border-brand-divider/70 text-gray-700 dark:bg-brand-darkSurface/70 dark:border-brand-darkBorder dark:text-brand-darkIcon hover:shadow-md">
                                                 <ThinkingSection content={sections.thinking} />
                                                 <AnswerSection content={sections.answer} />

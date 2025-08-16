@@ -7,11 +7,10 @@
 		"start": "electron-vite preview",
 		"dev": "dotenv electron-vite dev",
 		"build": "electron-vite build && mkdir -p out/config && cp config/mcp-servers.json out/config/",
-		"build:main": "electron-vite build --main",
-		"build:preload": "electron-vite build --preload",
-		"build:renderer": "electron-vite build --renderer",
-		"clean": "rimraf dist",
-		"test": "vitest"
+		"clean": "rimraf out",
+		"test": "vitest",
+		"debug:langgraph": "dotenv ts-node -r tsconfig-paths/register scripts/test-langgraph.ts",
+		"debug:node": "dotenv ts-node -r tsconfig-paths/register"
 	},
 	"repository": {
 		"type": "git",

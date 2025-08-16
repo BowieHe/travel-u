@@ -1,6 +1,7 @@
 import { AIMessage, SystemMessage } from '@langchain/core/messages';
 import { DeepSeek } from '../models/deepseek';
 import { AgentState } from '../utils/agent-type';
+import { Gemini } from '../models/gemini';
 
 const DIRECT_PROMPT = `
 你是一个万能回答助手，负责直接、简洁、准确地回答用户的简单问题。
@@ -12,7 +13,6 @@ const DIRECT_PROMPT = `
 4. 保持中立、客观，禁止虚构事实。
 5. 如果问题含糊，做合理假设并直接给出最佳答案。
 6. 允许使用事实、计算、翻译、常识等直接输出结果。
-7. 如果问题超出简单问答范围，回复："我无法处理此类问题"（不要解释原因）。
 
 输出格式：
 - 使用简洁的 Markdown 格式回答
@@ -23,7 +23,8 @@ const DIRECT_PROMPT = `
 
 export const createDirectAnswerNode = () => {
     const llm = new DeepSeek();
-    const model = llm.llm('deepseek-chat');
+    const model = llm.llm('deepseek-reasoner'); // 使用普通chat模型以避免思考内容
+    // const model = new Gemini().llm('gemini-2.5-pro');
 
     return async (state: AgentState): Promise<Partial<AgentState>> => {
         const system = new SystemMessage({ content: DIRECT_PROMPT });

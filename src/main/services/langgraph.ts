@@ -46,7 +46,7 @@ export class LangGraphService {
 
     /**
      * 统一的流式处理方法
-     * 支持思考模型的 part.thought 和 part.text 处理
+     * 支持思考模型的 additional_kwargs.reasoning_content 处理
      */
     async *streamMessage(
         message: string,
@@ -90,8 +90,8 @@ export class LangGraphService {
             ];
             
             // 思考内容状态管理
-            let isInThinkingMode = false;
             let hasOutputThinkingHeader = false;
+            let hasOutputAnswerHeader = false;
 
             for await (const item of stream) {
                 if (Array.isArray(item)) {
@@ -108,36 +108,39 @@ export class LangGraphService {
                         if (ctor === 'HumanMessage') continue;
                         
                         // 处理AI消息内容
-                        let content: any = (msg as any).content;
+                        const content: any = (msg as any).content;
+                        const additionalKwargs = (msg as any).additional_kwargs || {};
+                        const reasoningContent = additionalKwargs.reasoning_content;
                         
-                        // 检查是否是思考模型的响应格式（包含 parts 数组）
-                        if (Array.isArray(content)) {
-                            for (const part of content) {
-                                if (part.thought) {
-                                    // 这是思考内容 - 类似伪代码中的 part.thought
-                                    if (!hasOutputThinkingHeader) {
-                                        yield '## 🤔 思考\n';
-                                        hasOutputThinkingHeader = true;
-                                        isInThinkingMode = true;
-                                    }
-                                    yield part.text || '';
-                                } else if (part.text) {
-                                    // 这是正常回答内容 - 类似伪代码中的 part.text
-                                    if (isInThinkingMode) {
-                                        // 思考结束，开始回答
-                                        yield '\n\n## 📝 回答\n';
-                                        isInThinkingMode = false;
-                                    }
-                                    yield part.text;
-                                }
-                            }
-                        } else {
-                            // 处理普通字符串内容（非思考模型）
-                            if (typeof content === 'string') {
-                                if (ctor === 'AIMessage') yield '\n';
-                                yield content;
-                            }
+                        // 调试日志
+                        if (reasoningContent || content) {
+                            console.log('Processing AI message:', {
+                                hasReasoningContent: !!reasoningContent,
+                                hasContent: !!content,
+                                reasoningLength: reasoningContent ? reasoningContent.length : 0,
+                                contentLength: content ? content.length : 0
+                            });
                         }
+                        
+                        // 处理思考内容 (reasoning_content)
+                        if (reasoningContent && typeof reasoningContent === 'string') {
+                            if (!hasOutputThinkingHeader) {
+                                yield '## 🤔 思考\n';
+                                hasOutputThinkingHeader = true;
+                            }
+                            yield reasoningContent;
+                        }
+                        
+                        // 处理正文内容 (content)
+                        if (content && typeof content === 'string') {
+                            // 如果之前输出了思考内容，需要添加回答header
+                            if (hasOutputThinkingHeader && !hasOutputAnswerHeader) {
+                                yield '\n\n## 📝 回答\n';
+                                hasOutputAnswerHeader = true;
+                            }
+                            yield content;
+                        }
+                        
                     } else if (mode === 'updates') {
                         // 处理 interrupt 更新
                         if (data && data.__interrupt__) {
