@@ -234,9 +234,9 @@ export const ChatDrawer: React.FC<{
                 <div className="text-xs font-medium tracking-wide text-blue-600 dark:text-blue-400 uppercase mb-2">
                     🤔 思考过程
                 </div>
-                <ReactMarkdown className="text-sm text-blue-700 dark:text-blue-300 markdown-body">
-                    {content}
-                </ReactMarkdown>
+                <div className="text-sm text-blue-700 dark:text-blue-300 markdown-body">
+                    <ReactMarkdown>{content}</ReactMarkdown>
+                </div>
             </div>
         );
     };
@@ -259,9 +259,8 @@ export const ChatDrawer: React.FC<{
                 <div className="text-xs font-medium tracking-wide text-gray-500 uppercase">
                     📋 计划
                 </div>
-                <div className="plan-content">
+                <div className="plan-content markdown-body">
                     <ReactMarkdown 
-                        className="markdown-body"
                         components={{
                             // 自定义复选框渲染
                             input: ({ type, checked, ...props }) => {
@@ -291,6 +290,18 @@ export const ChatDrawer: React.FC<{
                                 <ul className="space-y-1 list-none pl-0" {...props}>
                                     {children}
                                 </ul>
+                            ),
+                            // 自定义强调文本渲染
+                            strong: ({ children, ...props }) => (
+                                <strong className="font-semibold text-gray-800 dark:text-gray-200" {...props}>
+                                    {children}
+                                </strong>
+                            ),
+                            // 自定义引用块渲染
+                            blockquote: ({ children, ...props }) => (
+                                <blockquote className="border-l-4 border-blue-400 pl-4 italic text-gray-600 dark:text-gray-400 my-2" {...props}>
+                                    {children}
+                                </blockquote>
                             )
                         }}
                     >

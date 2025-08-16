@@ -159,12 +159,12 @@ export function getMissingField(tripPlan: TripInfo): string[] {
     const missingFields: string[] = [];
     if (!tripPlan.destination) missingFields.push('destination');
     if (!tripPlan.departure) missingFields.push('departure');
-    if (!tripPlan.startDate) missingFields.push('startDate');
-    if (!tripPlan.endDate) missingFields.push('endDate');
-    if (tripPlan.budget === undefined || tripPlan.budget === null) missingFields.push('budget');
-    if (!tripPlan.transportation) missingFields.push('transportation');
-    if (!tripPlan.travelers) missingFields.push('travelers');
-    if (!tripPlan.preferences) missingFields.push('preferences');
+    // if (!tripPlan.startDate) missingFields.push('startDate');
+    // if (!tripPlan.endDate) missingFields.push('endDate');
+    // if (tripPlan.budget === undefined || tripPlan.budget === null) missingFields.push('budget');
+    // if (!tripPlan.transportation) missingFields.push('transportation');
+    // if (!tripPlan.travelers) missingFields.push('travelers');
+    // if (!tripPlan.preferences) missingFields.push('preferences');
 
     return missingFields;
 }
