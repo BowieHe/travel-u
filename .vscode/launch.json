@@ -4,9 +4,9 @@
         {
             "type": "node",
             "request": "launch",
-            "name": "Debug API (ts-node)",
-            "program": "${workspaceFolder}/src/main/web-server.ts",
-            "runtimeExecutable": "node",
+            "name": "Debug Electron Main Process",
+            "program": "${workspaceFolder}/src/main/index.ts",
+            "runtimeExecutable": "electron",
             "runtimeArgs": [
                 "-r",
                 "dotenv/config",
@@ -17,19 +17,11 @@
             ],
             "cwd": "${workspaceFolder}",
             "env": {
-                "NODE_ENV": "development",
-                "VITE_IS_WEB": "true"
+                "NODE_ENV": "development"
             },
             "sourceMaps": true,
             "console": "integratedTerminal",
             "skipFiles": ["<node_internals>/**"]
-        }
-    ],
-    "compounds": [
-        {
-            "name": "Debug Full Stack (Web)",
-            "configurations": ["Debug API (ts-node)"],
-            "preLaunchTask": "Start Vite (Web)"
         }
     ]
 }

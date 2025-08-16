@@ -3,13 +3,13 @@ import * as dotenv from 'dotenv';
 import * as path from 'path';
 import { createWindow, cleanupWindow } from './window';
 import { McpService } from './services/mcp/mcp';
-import { startServer } from './web-server'; // 显式启动内嵌 Web API 服务器
+import { ChatIpcHandler } from './ipc/chat-handler';
 
 // 加载环境变量
 dotenv.config({ path: path.join(__dirname, '../../.env') });
 
 let mainWindow: BrowserWindow;
-// 已移除 ChatIpcHandler，统一使用 SSE HTTP 通道
+let chatIpcHandler: ChatIpcHandler;
 
 /**
  * 应用程序入口点
@@ -17,17 +17,13 @@ let mainWindow: BrowserWindow;
 async function main() {
     await app.whenReady();
 
-    // 1. 启动内嵌 Web API 服务器 (SSE 所需)
-    try {
-        await startServer();
-    } catch (err) {
-        console.error('启动内嵌 Web 服务器失败:', err);
-    }
+    // 初始化聊天IPC处理器
+    chatIpcHandler = ChatIpcHandler.getInstance();
 
-    // 2. 创建窗口（SSE 直接访问内嵌 web server）
+    // 创建窗口
     mainWindow = createWindow();
 
-    // 3. 后台异步初始化 MCP Client（不阻塞界面）
+    // 后台异步初始化 MCP Client（不阻塞界面）
     initializeMcpClient().catch((error) => {
         console.error('后台初始化 MCP Client 失败:', error);
     });
@@ -41,15 +37,15 @@ async function initializeMcpClient(): Promise<void> {
         const mcpService = McpService.getInstance();
         await mcpService.initialize();
 
-        // // 通知渲染进程MCP初始化完成
-        if (mainWindow && !mainWindow.isDestroyed()) {
-            // 可以在这里发送 IPC 消息给渲染进程
-            // const status = await mcpService.getStatus();
-            // mainWindow.webContents.send('mcp-initialized', {
-            //     success: true,
-            //     toolCount: status.tools.length,
-            // });
-        }
+    // // 通知渲染进程MCP初始化完成
+    if (mainWindow && !mainWindow.isDestroyed()) {
+        // 可以在这里发送 IPC 消息给渲染进程
+        // const status = await mcpService.getStatus();
+        // mainWindow.webContents.send('mcp-initialized', {
+        //     success: true,
+        //     toolCount: status.tools.length,
+        // });
+    }
     } catch (error) {
         console.error('MCP Client Manager 初始化失败:', error);
 
@@ -92,7 +88,10 @@ app.on('before-quit', async () => {
         cleanupWindow(mainWindow);
     }
 
-    // 无 IPC 聊天需要清理
+    // 清理聊天IPC处理器
+    if (chatIpcHandler) {
+        chatIpcHandler.cleanup();
+    }
 
     // 清理 MCP Client
     const mcpService = McpService.getInstance();

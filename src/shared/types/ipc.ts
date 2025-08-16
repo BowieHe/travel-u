@@ -1,12 +1,18 @@
 import { McpStatus, McpInitializedEvent } from './mcp';
 
 /**
- * Electron API 接口定义 - 只保留必要的功能
+ * Electron API 接口定义
  */
 export interface ElectronAPI {
     // 系统信息
     getVersion: () => string;
     getPlatform: () => string;
+
+    // 聊天相关
+    chatStreamMessage: (message: string) => Promise<{ success: boolean; error?: string }>;
+    onChatMessageChunk: (callback: (chunk: string) => void) => void;
+    onChatMessageComplete: (callback: () => void) => void;
+    onChatMessageError: (callback: (error: string) => void) => void;
 
     // MCP 状态
     getMcpStatus: () => Promise<McpStatus>;

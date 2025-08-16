@@ -15,8 +15,10 @@ const DIRECT_PROMPT = `
 7. 如果问题超出简单问答范围，回复："我无法处理此类问题"（不要解释原因）。
 
 输出格式：
-- 直接用自然语言回答，不使用 JSON、Markdown、代码块等包装。
-- 如果有数值、日期、时间等信息，保持格式清晰。
+- 使用简洁的 Markdown 格式回答
+- 支持粗体、斜体、列表等基本格式
+- 如果有数值、日期、时间等信息，保持格式清晰
+- 不使用 JSON 或代码块包装
 `;
 
 export const createDirectAnswerNode = () => {
@@ -32,7 +34,7 @@ export const createDirectAnswerNode = () => {
         console.log('Direct Answer Response:', resp);
 
         return {
-            messages: [new AIMessage({ content: JSON.stringify({ direct_answer: resp.content }) })],
+            messages: [new AIMessage({ content: resp.content })],
         };
     };
 };

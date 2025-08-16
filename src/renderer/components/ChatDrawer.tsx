@@ -8,6 +8,7 @@ import {
     ChevronsLeft,
     ChevronsRight,
 } from 'lucide-react';
+import ReactMarkdown from 'react-markdown';
 import { createChatAPI } from '@/main/ipc/chat-api';
 
 interface SuggestionItem {
@@ -175,53 +176,127 @@ export const ChatDrawer: React.FC<{
         }
     };
 
-    const parseMessageContent = (content: string) => {
+    // 分段式解析函数 - 支持流式渲染
+    const parseStreamingSections = (content: string) => {
+        const result = {
+            thinking: '',
+            answer: '',
+            plan: '',
+            current: 'answer' // 默认类型
+        };
+        
+        // 尝试解析JSON格式（向后兼容）
         try {
             const parsed = JSON.parse(content);
             if (typeof parsed === 'object' && parsed) {
-                return {
-                    thinking: parsed.thinking || '',
-                    directAnswer: parsed.direct_answer || '',
-                    plan: Array.isArray(parsed.plan) ? parsed.plan : [],
-                    raw: parsed,
-                };
+                result.thinking = parsed.thinking || '';
+                result.answer = parsed.direct_answer || '';
+                result.plan = parsed.plan ? 
+                    parsed.plan.map((item: any) => `- [ ] ${item.description || item}`).join('\n') : '';
+                return result;
             }
-        } catch (error) {
-            return { thinking: '', directAnswer: content, plan: [], raw: null };
+        } catch {
+            // 不是JSON，继续markdown解析
         }
-        return { thinking: '', directAnswer: content, plan: [], raw: null };
+        
+        // 分段解析markdown
+        const sections = content.split(/^## (🤔 思考|📝 回答|📋 计划)/m);
+        
+        for (let i = 1; i < sections.length; i += 2) {
+            const sectionType = sections[i];
+            const sectionContent = (sections[i + 1] || '').trim();
+            
+            if (sectionType.includes('思考')) {
+                result.thinking = sectionContent;
+                result.current = 'thinking';
+            } else if (sectionType.includes('回答')) {
+                result.answer = sectionContent;
+                result.current = 'answer';
+            } else if (sectionType.includes('计划')) {
+                result.plan = sectionContent;
+                result.current = 'plan';
+            }
+        }
+        
+        // 如果没有明确section，归到answer
+        if (!result.thinking && !result.answer && !result.plan) {
+            result.answer = content;
+        }
+        
+        return result;
     };
 
-    const PlanBlock: React.FC<{ plan: any[] }> = ({ plan }) => {
-        if (!plan || plan.length === 0) return null;
+    // 思考内容组件
+    const ThinkingSection: React.FC<{ content: string }> = ({ content }) => {
+        if (!content) return null;
+        return (
+            <div className="mb-3 p-3 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
+                <div className="text-xs font-medium tracking-wide text-blue-600 dark:text-blue-400 uppercase mb-2">
+                    🤔 思考过程
+                </div>
+                <ReactMarkdown className="text-sm text-blue-700 dark:text-blue-300 markdown-body">
+                    {content}
+                </ReactMarkdown>
+            </div>
+        );
+    };
+
+    // 回答内容组件
+    const AnswerSection: React.FC<{ content: string }> = ({ content }) => {
+        if (!content) return null;
+        return (
+            <div className="markdown-body text-[14.5px] leading-[1.55] tracking-[0.2px] whitespace-pre-wrap [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
+                <ReactMarkdown>{content}</ReactMarkdown>
+            </div>
+        );
+    };
+
+    // 计划内容组件
+    const PlanSection: React.FC<{ content: string }> = ({ content }) => {
+        if (!content) return null;
         return (
             <div className="mt-3 space-y-2">
                 <div className="text-xs font-medium tracking-wide text-gray-500 uppercase">
-                    计划
+                    📋 计划
                 </div>
-                <ul className="space-y-1">
-                    {plan.map((item, idx) => (
-                        <li
-                            key={idx}
-                            className="flex items-start gap-2 rounded-lg bg-white/60 dark:bg-white/10 border border-brand-divider/50 px-2 py-1.5 text-[13px] leading-snug backdrop-blur-sm"
-                        >
-                            <input
-                                type="checkbox"
-                                className="mt-0.5 accent-travel-primary cursor-pointer"
-                                disabled
-                            />
-                            <div className="flex-1 min-w-0">
-                                <div className="truncate font-medium text-gray-700 dark:text-gray-200">
-                                    {item.description || '未提供描述'}
-                                </div>
-                                <div className="text-[11px] text-gray-400 mt-0.5 flex gap-3">
-                                    {item.category && <span>分类: {item.category}</span>}
-                                    {item.priority && <span>优先级: {item.priority}</span>}
-                                </div>
-                            </div>
-                        </li>
-                    ))}
-                </ul>
+                <div className="plan-content">
+                    <ReactMarkdown 
+                        className="markdown-body"
+                        components={{
+                            // 自定义复选框渲染
+                            input: ({ type, checked, ...props }) => {
+                                if (type === 'checkbox') {
+                                    return (
+                                        <input
+                                            type="checkbox"
+                                            className="mt-0.5 accent-travel-primary cursor-pointer"
+                                            checked={checked}
+                                            disabled
+                                            {...props}
+                                        />
+                                    );
+                                }
+                                return <input type={type} checked={checked} {...props} />;
+                            },
+                            // 自定义列表项渲染
+                            li: ({ children, ...props }) => (
+                                <li 
+                                    className="flex items-start gap-2 rounded-lg bg-white/60 dark:bg-white/10 border border-brand-divider/50 px-2 py-1.5 text-[13px] leading-snug backdrop-blur-sm mb-1"
+                                    {...props}
+                                >
+                                    {children}
+                                </li>
+                            ),
+                            ul: ({ children, ...props }) => (
+                                <ul className="space-y-1 list-none pl-0" {...props}>
+                                    {children}
+                                </ul>
+                            )
+                        }}
+                    >
+                        {content}
+                    </ReactMarkdown>
+                </div>
             </div>
         );
     };
@@ -274,39 +349,38 @@ export const ChatDrawer: React.FC<{
                         ) : (
                             <div className="space-y-5 py-5">
                                 {messages.map((message) => {
-                                    const { thinking, directAnswer, plan } = parseMessageContent(
-                                        message.content
-                                    );
+                                    if (message.sender === 'user') {
+                                        return (
+                                            <div
+                                                key={message.id}
+                                                className="flex gap-3 ml-auto flex-row-reverse max-w-[80%]"
+                                            >
+                                                <div className="group relative rounded-2xl px-4 py-3 shadow-sm transition-all animate-chat-in bg-travel-primary text-white hover:shadow-md">
+                                                    <div className="text-[14.5px] leading-[1.55] tracking-[0.2px] whitespace-pre-wrap">
+                                                        {message.content}
+                                                    </div>
+                                                    <span className="absolute -bottom-4 right-1 text-[10px] font-medium tracking-wide italic transition-opacity select-none pointer-events-none text-gray-400 dark:text-brand-darkIcon/60">
+                                                        {message.timestamp.toLocaleTimeString([], {
+                                                            hour: '2-digit',
+                                                            minute: '2-digit',
+                                                        })}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        );
+                                    }
+
+                                    // AI消息使用分段式渲染
+                                    const sections = parseStreamingSections(message.content);
                                     return (
                                         <div
                                             key={message.id}
-                                            className={`flex gap-3 ${
-                                                message.sender === 'user'
-                                                    ? 'ml-auto flex-row-reverse max-w-[80%]'
-                                                    : 'max-w-[85%]'
-                                            }`}
+                                            className="flex gap-3 max-w-[85%]"
                                         >
-                                            <div
-                                                className={`group relative rounded-2xl px-4 py-3 shadow-sm transition-all animate-chat-in ${
-                                                    message.sender === 'user'
-                                                        ? 'bg-travel-primary text-white'
-                                                        : 'bg-travel-light/90 border border-brand-divider/70 text-gray-700 dark:bg-brand-darkSurface/70 dark:border-brand-darkBorder dark:text-brand-darkIcon'
-                                                } hover:shadow-md`}
-                                            >
-                                                {thinking && (
-                                                    <div className="text-xs text-gray-500 mb-2 space-y-1 font-semibold">
-                                                        <strong className="font-semibold">
-                                                            思考:
-                                                        </strong>{' '}
-                                                        {thinking}
-                                                    </div>
-                                                )}
-                                                {directAnswer && (
-                                                    <div className="markdown-body text-[14.5px] leading-[1.55] tracking-[0.2px] whitespace-pre-wrap [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
-                                                        {directAnswer}
-                                                    </div>
-                                                )}
-                                                <PlanBlock plan={plan} />
+                                            <div className="group relative rounded-2xl px-4 py-3 shadow-sm transition-all animate-chat-in bg-travel-light/90 border border-brand-divider/70 text-gray-700 dark:bg-brand-darkSurface/70 dark:border-brand-darkBorder dark:text-brand-darkIcon hover:shadow-md">
+                                                <ThinkingSection content={sections.thinking} />
+                                                <AnswerSection content={sections.answer} />
+                                                <PlanSection content={sections.plan} />
                                                 <span className="absolute -bottom-4 right-1 text-[10px] font-medium tracking-wide italic transition-opacity select-none pointer-events-none text-gray-400 dark:text-brand-darkIcon/60">
                                                     {message.timestamp.toLocaleTimeString([], {
                                                         hour: '2-digit',

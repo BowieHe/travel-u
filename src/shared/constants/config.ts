@@ -30,7 +30,11 @@ export const APP_CONFIG = {
  * IPC 通道名称
  */
 export const IPC_CHANNELS = {
-    // （已移除 AI 聊天 IPC，改用 SSE HTTP）
+    // 聊天相关
+    CHAT_STREAM_MESSAGE: 'chat-stream-message',
+    CHAT_MESSAGE_CHUNK: 'chat-message-chunk',
+    CHAT_MESSAGE_COMPLETE: 'chat-message-complete',
+    CHAT_MESSAGE_ERROR: 'chat-message-error',
 
     // MCP 相关
     GET_MCP_STATUS: 'get-mcp-status',

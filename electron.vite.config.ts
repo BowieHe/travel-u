@@ -80,7 +80,7 @@ export default defineConfig({
             },
         },
         server: {
-            port: 5173, // 确保和 web dev server 使用不同的端口
+            port: 5173, // Electron renderer 端口
         },
     },
 });

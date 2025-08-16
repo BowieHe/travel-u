@@ -12,7 +12,14 @@ const electronAPI: ElectronAPI = {
     getVersion: () => process.versions.electron,
     getPlatform: () => process.platform,
 
-    // （已移除聊天 IPC，前端直接通过 SSE 调用后端）
+    // 聊天相关
+    chatStreamMessage: (message: string) => ipcRenderer.invoke(IPC_CHANNELS.CHAT_STREAM_MESSAGE, message),
+    onChatMessageChunk: (callback: (chunk: string) => void) =>
+        ipcRenderer.on(IPC_CHANNELS.CHAT_MESSAGE_CHUNK, (_, chunk) => callback(chunk)),
+    onChatMessageComplete: (callback: () => void) =>
+        ipcRenderer.on(IPC_CHANNELS.CHAT_MESSAGE_COMPLETE, () => callback()),
+    onChatMessageError: (callback: (error: string) => void) =>
+        ipcRenderer.on(IPC_CHANNELS.CHAT_MESSAGE_ERROR, (_, error) => callback(error)),
 
     // MCP 状态
     getMcpStatus: () => ipcRenderer.invoke(IPC_CHANNELS.GET_MCP_STATUS),
