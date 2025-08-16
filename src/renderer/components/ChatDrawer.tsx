@@ -7,6 +7,8 @@ import {
     Send,
     ChevronsLeft,
     ChevronsRight,
+    ChevronDown,
+    ChevronRight,
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { createChatAPI } from '@/main/ipc/chat-api';
@@ -71,6 +73,7 @@ export const ChatDrawer: React.FC<{
 
     const handleSuggestionClick = (suggestion: SuggestionItem) => {
         setInputMessage(suggestion.text);
+        sendMessage();
     };
 
     const sendMessage = async () => {
@@ -176,7 +179,7 @@ export const ChatDrawer: React.FC<{
         }
     };
 
-    // 分段式解析函数 - 支持流式渲染
+    // 分段式解析函数 - 支持 XML 标签和 Markdown 格式
     const parseStreamingSections = (content: string) => {
         const result = {
             thinking: '',
@@ -197,10 +200,52 @@ export const ChatDrawer: React.FC<{
                 return result;
             }
         } catch {
-            // 不是JSON，继续markdown解析
+            // 不是JSON，继续其他解析
         }
 
-        // 分段解析markdown
+        // 尝试解析XML标签格式
+        const reasoningMatch = content.match(/<reasoning>([\s\S]*?)<\/reasoning>/);
+        const contentMatch = content.match(/<content>([\s\S]*?)<\/content>/);
+        const todoMatch = content.match(/<todo>([\s\S]*?)<\/todo>/);
+
+        if (reasoningMatch || contentMatch || todoMatch) {
+            result.thinking = reasoningMatch ? reasoningMatch[1].trim() : '';
+            result.answer = contentMatch ? contentMatch[1].trim() : '';
+            
+            // 特殊处理todo标签中的JSON内容
+            if (todoMatch) {
+                let todoContent = todoMatch[1].trim();
+                console.log('Found todo content:', todoContent);
+                
+                // 检查是否是markdown格式的JSON代码块
+                const jsonCodeBlockMatch = todoContent.match(/```json\s*([\s\S]*?)\s*```/);
+                if (jsonCodeBlockMatch) {
+                    todoContent = jsonCodeBlockMatch[1].trim();
+                    console.log('Extracted JSON from code block:', todoContent);
+                }
+                
+                try {
+                    // 尝试解析JSON并直接传递给plan字段
+                    const parsed = JSON.parse(todoContent);
+                    result.plan = JSON.stringify(parsed); // 确保是字符串格式，供PlanSection进一步处理
+                    console.log('Parsed todo as JSON:', parsed);
+                } catch (e) {
+                    // 如果不是JSON，直接使用原内容
+                    result.plan = todoContent;
+                    console.log('Todo content is not JSON, using as-is:', todoContent);
+                }
+            }
+
+            // 确定当前渲染的部分
+            if (todoMatch) result.current = 'plan';
+            else if (contentMatch) result.current = 'answer';
+            else if (reasoningMatch) result.current = 'thinking';
+
+            console.log('XML parsing result:', { thinking: result.thinking, answer: result.answer, plan: result.plan, current: result.current });
+            return result;
+        }
+
+        // 分段解析markdown（向后兼容）
         const sections = content.split(/^## (🤔 思考|📝 回答|📋 计划)/m);
 
         for (let i = 1; i < sections.length; i += 2) {
@@ -227,17 +272,31 @@ export const ChatDrawer: React.FC<{
         return result;
     };
 
-    // 思考内容组件
+    // 思考内容组件 - 支持折叠/展开
     const ThinkingSection: React.FC<{ content: string }> = ({ content }) => {
+        const [isExpanded, setIsExpanded] = useState(false);
+
         if (!content) return null;
+
         return (
-            <div className="mb-3 p-3 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
-                <div className="text-xs font-medium tracking-wide text-blue-600 dark:text-blue-400 uppercase mb-2">
-                    🤔 思考过程
-                </div>
-                <div className="text-sm text-blue-700 dark:text-blue-300 markdown-body">
-                    <ReactMarkdown>{content}</ReactMarkdown>
-                </div>
+            <div className="mb-3 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
+                <button
+                    onClick={() => setIsExpanded(!isExpanded)}
+                    className="w-full flex items-center justify-between p-3 text-left hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors rounded-lg"
+                >
+                    <div className="text-xs font-medium tracking-wide text-blue-600 dark:text-blue-400 uppercase">
+                        🤔 思考过程
+                    </div>
+                    <div className="text-blue-600 dark:text-blue-400 ml-2 flex-shrink-0">
+                        {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                    </div>
+                </button>
+
+                {isExpanded && (
+                    <div className="px-3 pb-3 text-sm text-blue-700 dark:text-blue-300 markdown-body">
+                        <ReactMarkdown>{content}</ReactMarkdown>
+                    </div>
+                )}
             </div>
         );
     };
@@ -252,68 +311,143 @@ export const ChatDrawer: React.FC<{
         );
     };
 
-    // 计划内容组件
+    // 计划内容组件 - 支持 JSON 格式解析
     const PlanSection: React.FC<{ content: string }> = ({ content }) => {
         if (!content) return null;
+
+        console.log('PlanSection received content:', content);
+
+        // 尝试解析 JSON 格式的任务列表
+        let tasks: Array<{ description: string; category: string; priority: string }> = [];
+
+        try {
+            const parsed = JSON.parse(content);
+            console.log('PlanSection parsed JSON:', parsed);
+            if (Array.isArray(parsed)) {
+                // 新格式：直接是任务数组
+                tasks = parsed;
+                console.log('Using direct array format:', tasks);
+            } else if (parsed.tasks && Array.isArray(parsed.tasks)) {
+                // 旧格式：包装在 tasks 字段中（向后兼容）
+                tasks = parsed.tasks;
+                console.log('Using legacy tasks format:', tasks);
+            }
+        } catch (e) {
+            console.log('JSON parsing failed, trying markdown format:', e);
+            // 如果不是 JSON，尝试解析为 markdown 格式的任务列表
+            const lines = content.split('\n').filter((line) => line.trim().startsWith('- [ ]'));
+            tasks = lines.map((line) => {
+                const text = line.replace('- [ ]', '').trim();
+                // 尝试提取分类和优先级
+                const categoryMatch = text.match(/\(分类:\s*(\w+)/);
+                const priorityMatch = text.match(/优先级:\s*(\w+)\)/);
+
+                return {
+                    description: text.replace(/\s*\([^)]*\)\s*$/, '').trim(),
+                    category: categoryMatch ? categoryMatch[1] : 'other',
+                    priority: priorityMatch ? priorityMatch[1] : 'medium',
+                };
+            });
+        }
+
+        console.log('Final tasks array:', tasks);
+        if (tasks.length === 0) {
+            console.log('No tasks found, returning null');
+            return null;
+        }
+
+        const getCategoryIcon = (category: string) => {
+            switch (category) {
+                case 'research':
+                    return '🔍';
+                case 'booking':
+                    return '📝';
+                case 'transportation':
+                    return '🚗';
+                case 'accommodation':
+                    return '🏨';
+                case 'activity':
+                    return '🎯';
+                default:
+                    return '📋';
+            }
+        };
+
+        const getPriorityColor = (priority: string) => {
+            switch (priority) {
+                case 'high':
+                    return 'border-red-200 bg-red-50 dark:border-red-800 dark:bg-red-900/20';
+                case 'medium':
+                    return 'border-yellow-200 bg-yellow-50 dark:border-yellow-800 dark:bg-yellow-900/20';
+                case 'low':
+                    return 'border-green-200 bg-green-50 dark:border-green-800 dark:bg-green-900/20';
+                default:
+                    return 'border-gray-200 bg-gray-50 dark:border-gray-800 dark:bg-gray-900/20';
+            }
+        };
+
+        const getPriorityTextColor = (priority: string) => {
+            switch (priority) {
+                case 'high':
+                    return 'text-red-700 dark:text-red-300';
+                case 'medium':
+                    return 'text-yellow-700 dark:text-yellow-300';
+                case 'low':
+                    return 'text-green-700 dark:text-green-300';
+                default:
+                    return 'text-gray-700 dark:text-gray-300';
+            }
+        };
+
         return (
             <div className="mt-3 space-y-2">
                 <div className="text-xs font-medium tracking-wide text-gray-500 uppercase">
-                    📋 计划
+                    📋 计划清单
                 </div>
-                <div className="plan-content markdown-body">
-                    <ReactMarkdown
-                        components={{
-                            // 自定义复选框渲染
-                            input: ({ type, checked, ...props }) => {
-                                if (type === 'checkbox') {
-                                    return (
-                                        <input
-                                            type="checkbox"
-                                            className="mt-0.5 accent-travel-primary cursor-pointer"
-                                            checked={checked}
-                                            disabled
-                                            {...props}
-                                        />
-                                    );
-                                }
-                                return <input type={type} checked={checked} {...props} />;
-                            },
-                            // 自定义列表项渲染
-                            li: ({ children, ...props }) => (
-                                <li
-                                    className="flex items-start gap-2 rounded-lg bg-white/60 dark:bg-white/10 border border-brand-divider/50 px-2 py-1.5 text-[13px] leading-snug backdrop-blur-sm mb-1"
-                                    {...props}
+                <div className="space-y-2">
+                    {tasks.map((task, index) => (
+                        <div
+                            key={index}
+                            className={`flex items-start gap-3 rounded-lg border px-3 py-2.5 text-[13px] leading-snug backdrop-blur-sm ${getPriorityColor(
+                                task.priority
+                            )}`}
+                        >
+                            <input
+                                type="checkbox"
+                                className="mt-0.5 accent-travel-primary cursor-pointer flex-shrink-0"
+                                disabled
+                            />
+                            <div className="flex-1 min-w-0">
+                                <div
+                                    className={`font-medium ${getPriorityTextColor(task.priority)}`}
                                 >
-                                    {children}
-                                </li>
-                            ),
-                            ul: ({ children, ...props }) => (
-                                <ul className="space-y-1 list-none pl-0" {...props}>
-                                    {children}
-                                </ul>
-                            ),
-                            // 自定义强调文本渲染
-                            strong: ({ children, ...props }) => (
-                                <strong
-                                    className="font-semibold text-gray-800 dark:text-gray-200"
-                                    {...props}
-                                >
-                                    {children}
-                                </strong>
-                            ),
-                            // 自定义引用块渲染
-                            blockquote: ({ children, ...props }) => (
-                                <blockquote
-                                    className="border-l-4 border-blue-400 pl-4 italic text-gray-600 dark:text-gray-400 my-2"
-                                    {...props}
-                                >
-                                    {children}
-                                </blockquote>
-                            ),
-                        }}
-                    >
-                        {content}
-                    </ReactMarkdown>
+                                    {task.description}
+                                </div>
+                                <div className="flex items-center gap-2 mt-1 text-xs opacity-75">
+                                    <span className="flex items-center gap-1">
+                                        {getCategoryIcon(task.category)}
+                                        {task.category}
+                                    </span>
+                                    <span className="w-1 h-1 bg-current rounded-full"></span>
+                                    <span
+                                        className={`font-medium ${
+                                            task.priority === 'high'
+                                                ? 'text-red-600 dark:text-red-400'
+                                                : task.priority === 'medium'
+                                                ? 'text-yellow-600 dark:text-yellow-400'
+                                                : 'text-green-600 dark:text-green-400'
+                                        }`}
+                                    >
+                                        {task.priority === 'high'
+                                            ? '高优先级'
+                                            : task.priority === 'medium'
+                                            ? '中优先级'
+                                            : '低优先级'}
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                    ))}
                 </div>
             </div>
         );
