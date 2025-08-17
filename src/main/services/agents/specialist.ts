@@ -22,7 +22,8 @@ export function createSafeSpecialistAgent(tools: DynamicStructuredTool[], system
             // We don't need the full ReAct conversation history
 
             // Get the current task info
-            const currentTask = state.subtask[state.currentTaskIndex];
+            // todo)) because subtask has been removed, but not been implemented yet
+            const currentTask = 1
             if (!currentTask) {
                 throw new Error('No current task found');
             }

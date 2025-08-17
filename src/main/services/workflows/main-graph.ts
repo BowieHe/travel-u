@@ -1,11 +1,9 @@
 import { START, END, StateGraph } from '@langchain/langgraph';
 import { MemorySaver } from '@langchain/langgraph-checkpoint';
 import { AgentState } from '../utils/agent-type';
-// import { createOrchestrator } from '../agents/orchestrator';
 import { createMcpTools } from '../mcp/tools';
 
 import { TaskType } from '../utils/task-type';
-import { createSummarizer } from '../agents/summarizer';
 import { FOOD_PROMPT, ROUTER_PROMPT, SPOT_PROMPT } from '../prompts/prompt';
 import { createSafeSpecialistAgent } from '../agents/specialist';
 import { graphState } from '../state/graph-state';
@@ -18,13 +16,10 @@ import { createTripPlanSummaryNode } from '../agents/trip-plan-summary';
 export const initializeGraph = async () => {
     const { tools: mcpTools } = await createMcpTools();
 
-    // 2. Create the orchestrator agent (the ReAct agent executor)
-    // const orchestrator = createOrchestrator();
     const userInteractionSubgraph = createUserInteractionSubgraph(
         // mcpTools["time"]
         []
     ); // 已编译子图，可作为节点直接使用
-    const summarizer = createSummarizer();
 
     // 3. Create specialist agents and their tool nodes
     // const transportTools = [
@@ -93,13 +88,13 @@ export const initializeGraph = async () => {
         // .addNode('orchestrator', orchestrator) // legacy combined node (still available if needed)
         .addNode('ask_subgraph', askUserNode)
         .addNode('trip_plan_summary', tripPlanSummaryNode)
-        .addNode('agent_placeholder', agentPlaceholder)
+        .addNode('agent_router', agentPlaceholder)
         .addEdge(START, 'router')
         .addConditionalEdges('router', (state) => state.next, {
             direct_answer: 'direct_answer',
             planner: 'planner',
             ask_user: 'trip_plan_summary', // 先进入 trip_plan_summary
-            agent_placeholder: 'agent_placeholder',
+            agent_router: 'agent_router',
         })
         .addEdge('direct_answer', END)
         .addEdge('planner', END)
@@ -109,18 +104,11 @@ export const initializeGraph = async () => {
         .addEdge('ask_subgraph', 'planner')
         .addEdge('planner', 'planner_wait_user')
         .addConditionalEdges('planner_wait_user', (state) => state.next, {
-            agent_placeholder: 'agent_placeholder',
+            agent_router: 'agent_router',
             planner: 'planner',
         })
 
-        .addEdge('agent_placeholder', END);
-    // .addEdge('planner', 'orchestrator') // 如果想在 planner 后再交由 orchestrator 二次处理，可启用
-    // .addEdge('direct_answer', 'orchestrator')
-    // .addEdge('orchestrator', END);
-
-    // 如果需要：ask_user 与 agent_placeholder 最终也应回到 orchestrator 或 END（暂不接回以简化）
-    // .addEdge('ask_user', 'orchestrator')
-    // .addEdge('agent_placeholder', 'orchestrator')
+        .addEdge('agent_router', END);
 
     // 用新图替换返回
     // 6. Compile and return the graph

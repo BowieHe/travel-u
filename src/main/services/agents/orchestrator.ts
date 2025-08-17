@@ -27,6 +27,7 @@ const routingSchema = z.object({
 type Routing = z.infer<typeof routingSchema>;
 
 // 为 LLM 设计的 system 提示：只返回 routingSchema 对应 JSON（加入少量示例，提升一致性）
+// todo)) improve, remove the missing column
 const ROUTER_SYSTEM_PROMPT = `你是一个路由决策助手，读取“用户最新输入”并输出**严格 JSON**（无解释、无 Markdown、无代码块）。
 
 JSON 结构：
@@ -122,7 +123,7 @@ export const createRouterNode = () => {
                 next = 'ask_user';
                 break;
             case 'agent':
-                next = 'agent_placeholder';
+                next = 'agent_router';
                 break;
             default:
                 next = 'direct_answer';
@@ -130,11 +131,6 @@ export const createRouterNode = () => {
 
         const memory = { ...(state.memory || {}), routing };
         const partial: Partial<AgentState> = { memory, next };
-        if (routing.decision === 'missingField') {
-            const existing = state.tripInfo || {};
-            const missing = (routing.missing_fields || []).filter((f) => !(existing as any)[f]);
-            partial.interactionMissingFields = missing;
-        }
         return partial;
     };
 };

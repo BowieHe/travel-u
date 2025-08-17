@@ -111,7 +111,7 @@ export const createWaitForUserApprovalNode = () => {
         }
         if (approved) {
             return {
-                next: 'agent_placeholder',
+                next: 'agent_router',
             };
         } else {
             //re-run the planner

@@ -4,20 +4,14 @@ import { TripInfo } from '../tools/trip-plan';
 import { z } from 'zod';
 
 export type AgentNode =
-    | 'orchestrator'
-    | 'transportation_specialist'
-    | 'destination_specialist'
-    | 'subtask_parser'
-    | 'summary'
     | 'tools'
     | 'router'
     | 'planner'
     | 'direct_answer'
-    | 'agent_placeholder'
+    | 'agent_router'
     | 'ask_user'
     | 'trip_plan_summary';
 
-export type UserNode = 'ask_user' | 'process_response' | 'reletive_time' | 'wait_for_user';
 export type UserInteractionNode =
     | 'complete_interaction'
     | 'process_response'
@@ -31,21 +25,12 @@ export type SpecialistNode =
     | 'destination_specialist'
     | 'food_specialist';
 
-// LangGraph interrupt 相关类型定义
-export interface InterruptInfo {
-    interrupt_id: string;
-    value: any;
-    when?: string;
-    resuming?: boolean;
-}
 
 export interface AgentState {
     messages: Array<BaseMessage>;
-    next: AgentNode | 'END' | TaskType | UserNode | UserInteractionNode;
+    next: AgentNode | 'END' | TaskType  | UserInteractionNode;
 
     tripInfo?: TripInfo;
-    // for subtasks
-    subtask: Array<AnyExpertTask>;
     currentTaskIndex: number;
 
     currentSpecialist?: SpecialistNode | 'END';
@@ -58,9 +43,6 @@ export interface AgentState {
     // 通用记忆容器（路由、中间数据等）
     memory?: Record<string, any>;
 
-    // === 用户交互收集缺失字段支持 ===
-    // 当前仍缺失需要向用户询问的字段列表（来自路由的 missing_fields 或动态更新）
-    interactionMissingFields?: string[];
 }
 
 export interface UserInteractionState {

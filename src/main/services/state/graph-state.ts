@@ -30,12 +30,9 @@ export const graphState: StateGraphArgs<AgentState>['channels'] = {
     },
     next: {
         value: (_x, y) => y,
-        default: () => 'orchestrator',
+        default: () => 'router',
     },
-    subtask: {
-        value: (_x, y) => y,
-        default: () => [],
-    },
+
     currentTaskIndex: {
         value: (_x, y) => y,
         default: () => -1,
@@ -48,20 +45,12 @@ export const graphState: StateGraphArgs<AgentState>['channels'] = {
         value: (_x, y) => y, // 直接用新值替换
         default: () => undefined,
     },
-    // 添加与子图交互的字段
-    // userInteractionState: {
-    //     value: (x?: UserInteractionState, y?: UserInteractionState) => y ?? x,
-    //     default: () => undefined,
-    // },
+
     tripInfo: {
         value: (x, y) => y,
         default: () => ({}),
     },
 
-    interactionMissingFields: {
-        value: (_x, y) => y,
-        default: () => [],
-    },
 };
 
 /**
