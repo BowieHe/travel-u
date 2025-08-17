@@ -24,6 +24,14 @@ export interface BrowserLoadError {
     url: string;
 }
 
+export interface BrowserDOMContent {
+    text: string;
+    links: Array<{ text: string; href: string }>;
+    images: Array<{ alt: string; src: string }>;
+    headings: Array<{ level: number; text: string }>;
+    articles: Array<{ title: string; content: string }>;
+}
+
 /**
  * Electron API 接口定义
  */
@@ -56,6 +64,7 @@ export interface ElectronAPI {
     browserViewReload: () => Promise<{ success: boolean }>;
     browserViewStop: () => Promise<{ success: boolean }>;
     browserViewGetInfo: () => Promise<BrowserPageInfo>;
+    browserViewExtractDOM: () => Promise<{ success: boolean }>;
 
     // BrowserView 事件监听
     onBrowserPageInfoUpdated: (callback: (info: BrowserPageInfo) => void) => void;
@@ -63,6 +72,7 @@ export interface ElectronAPI {
     onBrowserLoadingFinished: (callback: () => void) => void;
     onBrowserLoadFailed: (callback: (error: BrowserLoadError) => void) => void;
     onBrowserNavigated: (callback: (data: { url: string }) => void) => void;
+    onBrowserDOMContent: (callback: (content: BrowserDOMContent) => void) => void;
 
     // 原有的BrowserView控制（保持兼容）
     toggleBrowserView: (isOpen: boolean) => Promise<boolean>;

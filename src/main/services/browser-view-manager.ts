@@ -39,42 +39,97 @@ export class BrowserViewManager {
             this.destroyBrowserView();
         }
 
+        console.log('BrowserView: 开始创建BrowserView');
+        console.log('Preload路径:', path.join(__dirname, '../../out/preload/browser-preload.js'));
+
         this.browserView = new BrowserView({
             webPreferences: {
                 nodeIntegration: false,
                 contextIsolation: true,
-                sandbox: true,
-                preload: path.join(__dirname, '../preload/browser-preload.js'), // 编译后的路径
-                webSecurity: true,
-                allowRunningInsecureContent: false,
+                sandbox: false, // 暂时禁用sandbox模式便于调试
+                preload: path.join(__dirname, '../../out/preload/browser-preload.js'),
+                webSecurity: false, // 暂时禁用web安全便于调试
+                allowRunningInsecureContent: true,
             }
         });
 
+        console.log('BrowserView: BrowserView创建完成');
+
         // 监听BrowserView的页面信息
         this.browserView.webContents.on('did-finish-load', () => {
+            console.log('BrowserView: 页面加载完成');
             this.sendToRenderer('browser-loading-finished');
+            this.updatePageInfo();
         });
 
         this.browserView.webContents.on('did-start-loading', () => {
+            console.log('BrowserView: 开始加载页面');
             this.sendToRenderer('browser-loading-started');
+            this.updatePageInfo();
+        });
+
+        this.browserView.webContents.on('did-stop-loading', () => {
+            console.log('BrowserView: 停止加载');
+            this.sendToRenderer('browser-loading-finished');
+            this.updatePageInfo();
         });
 
         this.browserView.webContents.on('did-fail-load', (event, errorCode, errorDescription, validatedURL) => {
+            console.log('BrowserView: 加载失败', errorCode, errorDescription);
             this.sendToRenderer('browser-load-failed', {
                 errorCode,
                 errorDescription,
                 url: validatedURL
             });
+            this.updatePageInfo();
         });
 
         // 监听导航事件
         this.browserView.webContents.on('did-navigate', (event, url) => {
+            console.log('BrowserView: 导航到', url);
             this.sendToRenderer('browser-navigated', { url });
+            this.updatePageInfo();
         });
 
         this.browserView.webContents.on('did-navigate-in-page', (event, url) => {
+            console.log('BrowserView: 页面内导航到', url);
             this.sendToRenderer('browser-navigated', { url });
+            this.updatePageInfo();
         });
+
+        // 监听页面标题变化
+        this.browserView.webContents.on('page-title-updated', (event, title) => {
+            console.log('BrowserView: 页面标题更新', title);
+            this.updatePageInfo();
+        });
+
+        // 添加控制台消息监听（用于调试）
+        this.browserView.webContents.on('console-message', (event, level, message, line, sourceId) => {
+            console.log(`BrowserView控制台[${level}]: ${message}`);
+        });
+
+        // 添加preload错误监听
+        this.browserView.webContents.on('preload-error', (event, preloadPath, error) => {
+            console.error('BrowserView preload错误:', preloadPath, error);
+        });
+    }
+
+    /**
+     * 更新页面信息并发送给渲染进程
+     */
+    private updatePageInfo(): void {
+        if (!this.browserView) return;
+
+        const pageInfo: PageInfo = {
+            url: this.getCurrentUrl(),
+            title: this.getCurrentTitle(),
+            canGoBack: this.canGoBack(),
+            canGoForward: this.canGoForward(),
+            isLoading: this.isLoading()
+        };
+
+        console.log('BrowserView: 更新页面信息', pageInfo);
+        this.sendToRenderer('browser-page-info-updated', pageInfo);
     }
 
     /**
@@ -233,6 +288,11 @@ export class BrowserViewManager {
             this.sendToRenderer('browser-page-info-updated', pageInfo);
         });
 
+        // 监听DOM内容提取结果
+        ipcMain.on('dom-content-extracted', (event, content: any) => {
+            this.sendToRenderer('browser-dom-content', content);
+        });
+
         // 处理来自渲染进程的BrowserView控制请求
         ipcMain.handle('browser-view-create', () => {
             this.createBrowserView();
@@ -288,6 +348,20 @@ export class BrowserViewManager {
                 isLoading: this.isLoading()
             };
         });
+
+        ipcMain.handle('browser-view-extract-dom', () => {
+            this.extractDOMContent();
+            return { success: true };
+        });
+    }
+
+    /**
+     * 提取DOM内容
+     */
+    extractDOMContent(): void {
+        if (!this.browserView) return;
+
+        this.browserView.webContents.send('extract-dom-content');
     }
 
     /**
@@ -296,6 +370,7 @@ export class BrowserViewManager {
     cleanup(): void {
         this.destroyBrowserView();
         ipcMain.removeAllListeners('browser-page-info');
+        ipcMain.removeAllListeners('dom-content-extracted');
         ipcMain.removeHandler('browser-view-create');
         ipcMain.removeHandler('browser-view-show');
         ipcMain.removeHandler('browser-view-hide');
@@ -306,5 +381,6 @@ export class BrowserViewManager {
         ipcMain.removeHandler('browser-view-reload');
         ipcMain.removeHandler('browser-view-stop');
         ipcMain.removeHandler('browser-view-get-info');
+        ipcMain.removeHandler('browser-view-extract-dom');
     }
 }

@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import { ElectronAPI, BrowserViewBounds, BrowserPageInfo, BrowserLoadError } from '@shared/types/ipc';
+import { ElectronAPI, BrowserViewBounds, BrowserPageInfo, BrowserLoadError, BrowserDOMContent } from '@shared/types/ipc';
 import { McpInitializedEvent } from '@shared/types/mcp';
 import { IPC_CHANNELS } from '@shared/constants/config';
 
@@ -42,6 +42,7 @@ const electronAPI: ElectronAPI = {
     browserViewReload: () => ipcRenderer.invoke('browser-view-reload'),
     browserViewStop: () => ipcRenderer.invoke('browser-view-stop'),
     browserViewGetInfo: () => ipcRenderer.invoke('browser-view-get-info'),
+    browserViewExtractDOM: () => ipcRenderer.invoke('browser-view-extract-dom'),
 
     // BrowserView事件监听
     onBrowserPageInfoUpdated: (callback: (info: BrowserPageInfo) => void) =>
@@ -54,6 +55,8 @@ const electronAPI: ElectronAPI = {
         ipcRenderer.on('browser-load-failed', (_, error) => callback(error)),
     onBrowserNavigated: (callback: (data: { url: string }) => void) =>
         ipcRenderer.on('browser-navigated', (_, data) => callback(data)),
+    onBrowserDOMContent: (callback: (content: BrowserDOMContent) => void) =>
+        ipcRenderer.on('browser-dom-content', (_, content) => callback(content)),
 
     // 原有的BrowserView控制（保持兼容）
     toggleBrowserView: (isOpen: boolean) =>
