@@ -1,19 +1,9 @@
-import { AIMessage, SystemMessage } from '@langchain/core/messages';
+import { AIMessage, HumanMessage, SystemMessage } from '@langchain/core/messages';
 import { DeepSeek } from '../models/deepseek';
-import { AgentState } from '../utils/agent-type';
+import { AgentState, PlanTodo } from '../utils/agent-type';
 import { Gemini } from '../models/gemini';
-import { z } from 'zod';
 import { extractAndParseJSON } from '../tools/json-parser';
-
-// Zod schema for task structure
-const TaskSchema = z.object({
-    description: z.string().describe('具体的任务描述，以动词开头'),
-    category: z.enum(['research', 'booking', 'transportation', 'accommodation', 'activity', 'other']).describe('任务分类'),
-    priority: z.enum(['high', 'medium', 'low']).describe('任务优先级'),
-});
-
-// 直接返回任务数组，不包装在 tasks 字段中
-const PlanSchema = z.array(TaskSchema).describe('任务列表数组，至少包含1个任务');
+import { interrupt } from '@langchain/langgraph';
 
 // Prompt for planner mode; generate structured task list
 const PLANNER_PROMPT = `你是一个旅行规划助手，当前模式: 规划 (planner)。
@@ -44,16 +34,19 @@ const PLANNER_PROMPT = `你是一个旅行规划助手，当前模式: 规划 (p
 [
   {
     "description": "研究西湖周边自然景点并挑选2个轻松路线",
+    "status":"pending",
     "category": "research",
     "priority": "high"
   },
   {
     "description": "制定第1天上午西湖漫步+断桥周边行程",
-    "category": "activity", 
+    "status":"pending",
+    "category": "activity",
     "priority": "high"
   },
   {
     "description": "筛选西湖周边性价比住宿3个备选",
+    "status":"pending",
     "category": "accommodation",
     "priority": "high"
   }
@@ -76,27 +69,56 @@ export const createPlannerNode = () => {
 
         // 验证并解析 JSON 输出
         try {
-            const validated = extractAndParseJSON<typeof PlanSchema>(content);
-            // const parsed = JSON.parse(content);
-            // const validated = PlanSchema.parse(parsed);
-
-            console.log("Get output from planner response：", JSON.stringify(validated))
+            const validated = extractAndParseJSON<PlanTodo>(content);
+            console.log('Get output from planner response：', JSON.stringify(validated));
 
             // 返回验证后的 JSON 字符串
-            return { messages: [new AIMessage({ content: JSON.stringify(validated) })] };
+            return { messages: [new AIMessage({ content: JSON.stringify(validated) })], planTodos: validated ? validated : [] };
         } catch (error) {
             console.error('Planner output validation failed:', error);
 
             // 如果解析失败，返回错误格式的默认计划
-            const fallbackPlan = [
+            const fallbackPlan: PlanTodo = [
                 {
-                    description: "重新整理需求信息并制定详细计划",
-                    category: "research" as const,
-                    priority: "high" as const
-                }
+                    description: '重新整理需求信息并制定详细计划',
+                    status: 'pending',
+                    category: 'research',
+                    priority: 'high',
+                },
             ];
 
-            return { messages: [new AIMessage({ content: JSON.stringify(fallbackPlan) })] };
+            return { messages: [new AIMessage({ content: JSON.stringify(fallbackPlan) })], planTodos: fallbackPlan };
+        }
+    };
+};
+
+export const createWaitForUserApprovalNode = () => {
+    return async (state: AgentState): Promise<Partial<AgentState>> => {
+        const lastMessage = state.messages[state.messages.length - 1];
+        console.log('--- 等待用户输入节点 ---');
+        const resume = interrupt({
+            request_type: 'user_input_needed',
+            message: lastMessage.content,
+        });
+        let approved = false
+        try {
+            const parsed = JSON.parse(resume)
+            if (parsed.approved) {
+                approved = true
+            }
+        } catch (error) {
+            console.warn('Normal message, not approval, retry planning: ', resume)
+        }
+        if (approved) {
+            return {
+                next: 'agent_placeholder',
+            };
+        } else {
+            //re-run the planner
+            return {
+                messages: [new HumanMessage({ content: resume.trim() })],
+                next: 'planner',
+            };
         }
     };
 };

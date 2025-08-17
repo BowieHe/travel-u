@@ -44,7 +44,10 @@ export default defineConfig({
             sourcemap: true,
             minify: false,
             rollupOptions: {
-                input: resolve(__dirname, "src/preload/index.ts"),
+                input: {
+                    index: resolve(__dirname, "src/preload/index.ts"),
+                    'browser-preload': resolve(__dirname, "src/preload/browser-preload.ts"),
+                },
             },
         },
     },

@@ -4,12 +4,16 @@ import * as path from 'path';
 import { createWindow, cleanupWindow } from './window';
 import { McpService } from './services/mcp/mcp';
 import { ChatIpcHandler } from './ipc/chat-handler';
+import { BrowserIpcHandler } from './ipc/browser-handler';
+import { BrowserViewManager } from './services/browser-view-manager';
 
 // 加载环境变量
 dotenv.config({ path: path.join(__dirname, '../../.env') });
 
 let mainWindow: BrowserWindow;
 let chatIpcHandler: ChatIpcHandler;
+let browserIpcHandler: BrowserIpcHandler;
+let browserViewManager: BrowserViewManager;
 
 /**
  * 应用程序入口点
@@ -20,8 +24,17 @@ async function main() {
     // 初始化聊天IPC处理器
     chatIpcHandler = ChatIpcHandler.getInstance();
 
+    // 初始化浏览器IPC处理器
+    browserIpcHandler = new BrowserIpcHandler();
+
     // 创建窗口
     mainWindow = createWindow();
+
+    // 初始化BrowserView管理器
+    browserViewManager = new BrowserViewManager(mainWindow);
+
+    // 设置浏览器IPC处理器的主窗口引用
+    browserIpcHandler.setMainWindow(mainWindow);
 
     // 后台异步初始化 MCP Client（不阻塞界面）
     initializeMcpClient().catch((error) => {
@@ -37,15 +50,15 @@ async function initializeMcpClient(): Promise<void> {
         const mcpService = McpService.getInstance();
         await mcpService.initialize();
 
-    // // 通知渲染进程MCP初始化完成
-    if (mainWindow && !mainWindow.isDestroyed()) {
-        // 可以在这里发送 IPC 消息给渲染进程
-        // const status = await mcpService.getStatus();
-        // mainWindow.webContents.send('mcp-initialized', {
-        //     success: true,
-        //     toolCount: status.tools.length,
-        // });
-    }
+        // // 通知渲染进程MCP初始化完成
+        if (mainWindow && !mainWindow.isDestroyed()) {
+            // 可以在这里发送 IPC 消息给渲染进程
+            // const status = await mcpService.getStatus();
+            // mainWindow.webContents.send('mcp-initialized', {
+            //     success: true,
+            //     toolCount: status.tools.length,
+            // });
+        }
     } catch (error) {
         console.error('MCP Client Manager 初始化失败:', error);
 
@@ -91,6 +104,16 @@ app.on('before-quit', async () => {
     // 清理聊天IPC处理器
     if (chatIpcHandler) {
         chatIpcHandler.cleanup();
+    }
+
+    // 清理浏览器IPC处理器
+    if (browserIpcHandler) {
+        browserIpcHandler.cleanup();
+    }
+
+    // 清理BrowserView管理器
+    if (browserViewManager) {
+        browserViewManager.cleanup();
     }
 
     // 清理 MCP Client

@@ -12,7 +12,7 @@ import { graphState } from '../state/graph-state';
 import { createUserInteractionSubgraph } from './user-interaction/graph';
 import { createRouterNode } from '../agents/orchestrator';
 import { createDirectAnswerNode } from '../agents/direct-answer';
-import { createPlannerNode } from '../agents/planner';
+import { createPlannerNode, createWaitForUserApprovalNode } from '../agents/planner';
 import { createTripPlanSummaryNode } from '../agents/trip-plan-summary';
 
 export const initializeGraph = async () => {
@@ -72,6 +72,8 @@ export const initializeGraph = async () => {
 
     // 新增一个占位节点（后续可替换为真正的 agent 工作流）
     const agentPlaceholder = async (_state: AgentState): Promise<Partial<AgentState>> => {
+
+        console.log("Enter agent placeHolder, with state:", JSON.stringify(_state))
         return {
             /* 暂无实现 */
         };
@@ -80,11 +82,14 @@ export const initializeGraph = async () => {
     // 替换占位：直接使用用户交互子图（内部含 interrupt 等逻辑）
     const askUserNode = userInteractionSubgraph; // RunnableGraph 兼容节点调用
 
+    const plannerWaitUserNode = createWaitForUserApprovalNode();
+
     // 构建新图
     const workflow = new StateGraph<AgentState>({ channels: graphState })
         .addNode('router', routerNode)
         .addNode('direct_answer', directNode)
         .addNode('planner', plannerNode)
+        .addNode("planner_wait_user", plannerWaitUserNode)
         // .addNode('orchestrator', orchestrator) // legacy combined node (still available if needed)
         .addNode('ask_subgraph', askUserNode)
         .addNode('trip_plan_summary', tripPlanSummaryNode)
@@ -102,6 +107,12 @@ export const initializeGraph = async () => {
         .addEdge('trip_plan_summary', 'ask_subgraph')
         // ask_user 完成后进入 planner
         .addEdge('ask_subgraph', 'planner')
+        .addEdge('planner', 'planner_wait_user')
+        .addConditionalEdges('planner_wait_user', (state) => state.next, {
+            agent_placeholder: 'agent_placeholder',
+            planner: 'planner',
+        })
+
         .addEdge('agent_placeholder', END);
     // .addEdge('planner', 'orchestrator') // 如果想在 planner 后再交由 orchestrator 二次处理，可启用
     // .addEdge('direct_answer', 'orchestrator')

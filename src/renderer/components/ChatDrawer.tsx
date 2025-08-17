@@ -72,21 +72,27 @@ export const ChatDrawer: React.FC<{
     ];
 
     const handleSuggestionClick = (suggestion: SuggestionItem) => {
-        setInputMessage(suggestion.text);
-        sendMessage();
+        sendMessage(suggestion.text);
     };
 
-    const sendMessage = async () => {
-        if (inputMessage.trim() === '' || isLoading) return;
+    const handleApprove = () => {
+        sendMessage(JSON.stringify({ approved: true }));
+    };
+
+    const sendMessage = async (messageContent?: string) => {
+        if ((inputMessage.trim() === '' || isLoading) && !messageContent) return;
         const chatAPI = createChatAPI();
+
+        const sendMsg = messageContent ? messageContent : inputMessage.trim();
+        console.log('Send msg:', sendMsg);
         const userMessage: Message = {
             id: Date.now().toString(),
-            content: inputMessage,
+            content: sendMsg,
             sender: 'user',
             timestamp: new Date(),
         };
         setMessages((prev) => [...prev, userMessage]);
-        const currentMessage = inputMessage;
+        const currentMessage = sendMsg;
         setInputMessage('');
         setIsLoading(true);
 
@@ -103,16 +109,16 @@ export const ChatDrawer: React.FC<{
         try {
             let fullResponse = '';
             chatAPI.onMessage((chunk: string) => {
-                // 尝试解析 interrupt JSON
-                try {
-                    const obj = JSON.parse(chunk);
-                    if (obj && obj.type === 'interrupt') {
-                        console.log('Received interrupt, setting awaiting user state');
-                        setAwaitingUser(true);
-                        setIsLoading(false);
-                        return; // 不把中断对象显示为文本
-                    }
-                } catch {}
+                // // 尝试解析 interrupt JSON
+                // try {
+                //     const obj = JSON.parse(chunk);
+                //     if (obj && obj.type === 'interrupt') {
+                //         console.log('Received interrupt, setting awaiting user state', obj);
+                //         setAwaitingUser(true);
+                //         setIsLoading(false);
+                //         return; // 不把中断对象显示为文本
+                //     }
+                // } catch {}
                 fullResponse += chunk;
                 setMessages((prev) =>
                     prev.map((msg) =>
@@ -211,19 +217,19 @@ export const ChatDrawer: React.FC<{
         if (reasoningMatch || contentMatch || todoMatch) {
             result.thinking = reasoningMatch ? reasoningMatch[1].trim() : '';
             result.answer = contentMatch ? contentMatch[1].trim() : '';
-            
+
             // 特殊处理todo标签中的JSON内容
             if (todoMatch) {
                 let todoContent = todoMatch[1].trim();
                 console.log('Found todo content:', todoContent);
-                
+
                 // 检查是否是markdown格式的JSON代码块
                 const jsonCodeBlockMatch = todoContent.match(/```json\s*([\s\S]*?)\s*```/);
                 if (jsonCodeBlockMatch) {
                     todoContent = jsonCodeBlockMatch[1].trim();
                     console.log('Extracted JSON from code block:', todoContent);
                 }
-                
+
                 try {
                     // 尝试解析JSON并直接传递给plan字段
                     const parsed = JSON.parse(todoContent);
@@ -241,28 +247,33 @@ export const ChatDrawer: React.FC<{
             else if (contentMatch) result.current = 'answer';
             else if (reasoningMatch) result.current = 'thinking';
 
-            console.log('XML parsing result:', { thinking: result.thinking, answer: result.answer, plan: result.plan, current: result.current });
+            console.log('XML parsing result:', {
+                thinking: result.thinking,
+                answer: result.answer,
+                plan: result.plan,
+                current: result.current,
+            });
             return result;
         }
 
-        // 分段解析markdown（向后兼容）
-        const sections = content.split(/^## (🤔 思考|📝 回答|📋 计划)/m);
+        // // 分段解析markdown（向后兼容）
+        // const sections = content.split(/^## (🤔 思考|📝 回答|📋 计划)/m);
 
-        for (let i = 1; i < sections.length; i += 2) {
-            const sectionType = sections[i];
-            const sectionContent = (sections[i + 1] || '').trim();
+        // for (let i = 1; i < sections.length; i += 2) {
+        //     const sectionType = sections[i];
+        //     const sectionContent = (sections[i + 1] || '').trim();
 
-            if (sectionType.includes('思考')) {
-                result.thinking = sectionContent;
-                result.current = 'thinking';
-            } else if (sectionType.includes('回答')) {
-                result.answer = sectionContent;
-                result.current = 'answer';
-            } else if (sectionType.includes('计划')) {
-                result.plan = sectionContent;
-                result.current = 'plan';
-            }
-        }
+        //     if (sectionType.includes('思考')) {
+        //         result.thinking = sectionContent;
+        //         result.current = 'thinking';
+        //     } else if (sectionType.includes('回答')) {
+        //         result.answer = sectionContent;
+        //         result.current = 'answer';
+        //     } else if (sectionType.includes('计划')) {
+        //         result.plan = sectionContent;
+        //         result.current = 'plan';
+        //     }
+        // }
 
         // 如果没有明确section，归到answer
         if (!result.thinking && !result.answer && !result.plan) {
@@ -449,6 +460,14 @@ export const ChatDrawer: React.FC<{
                         </div>
                     ))}
                 </div>
+                <div>
+                    <button
+                        className="text-left px-4 py-3 hover:bg-black/5 focus:bg-black/5 focus:outline-none group transition-colors"
+                        onClick={handleApprove}
+                    >
+                        Approve
+                    </button>
+                </div>
             </div>
         );
     };
@@ -573,7 +592,7 @@ export const ChatDrawer: React.FC<{
                                     <Sparkles size={20} />
                                 </button>
                                 <button
-                                    onClick={sendMessage}
+                                    onClick={() => sendMessage()}
                                     disabled={inputMessage.trim() === '' || isLoading}
                                     className={`p-0 bg-transparent border-none cursor-pointer text-brand-icon/80 transition-opacity ${
                                         inputMessage.trim() === '' || isLoading

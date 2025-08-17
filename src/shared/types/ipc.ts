@@ -1,6 +1,30 @@
 import { McpStatus, McpInitializedEvent } from './mcp';
 
 /**
+ * BrowserView相关类型定义
+ */
+export interface BrowserViewBounds {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+}
+
+export interface BrowserPageInfo {
+    url: string;
+    title: string;
+    canGoBack: boolean;
+    canGoForward: boolean;
+    isLoading: boolean;
+}
+
+export interface BrowserLoadError {
+    errorCode: number;
+    errorDescription: string;
+    url: string;
+}
+
+/**
  * Electron API 接口定义
  */
 export interface ElectronAPI {
@@ -22,6 +46,25 @@ export interface ElectronAPI {
     getMapConfig: () => { amapKey: string };
 
     // BrowserView 控制
+    browserViewCreate: () => Promise<{ success: boolean }>;
+    browserViewShow: (bounds: BrowserViewBounds) => Promise<{ success: boolean }>;
+    browserViewHide: () => Promise<{ success: boolean }>;
+    browserViewUpdateBounds: (bounds: BrowserViewBounds) => Promise<{ success: boolean }>;
+    browserViewNavigate: (url: string) => Promise<{ success: boolean }>;
+    browserViewGoBack: () => Promise<{ success: boolean }>;
+    browserViewGoForward: () => Promise<{ success: boolean }>;
+    browserViewReload: () => Promise<{ success: boolean }>;
+    browserViewStop: () => Promise<{ success: boolean }>;
+    browserViewGetInfo: () => Promise<BrowserPageInfo>;
+
+    // BrowserView 事件监听
+    onBrowserPageInfoUpdated: (callback: (info: BrowserPageInfo) => void) => void;
+    onBrowserLoadingStarted: (callback: () => void) => void;
+    onBrowserLoadingFinished: (callback: () => void) => void;
+    onBrowserLoadFailed: (callback: (error: BrowserLoadError) => void) => void;
+    onBrowserNavigated: (callback: (data: { url: string }) => void) => void;
+
+    // 原有的BrowserView控制（保持兼容）
     toggleBrowserView: (isOpen: boolean) => Promise<boolean>;
     onBrowserViewLoading: (callback: (isLoading: boolean) => void) => void;
     onBrowserViewError: (

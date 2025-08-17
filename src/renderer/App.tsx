@@ -1,13 +1,15 @@
-import React, { useState } from "react";
-// import BrowserViewDrawer from "@components/BrowserPage";
-import { ChatDrawer } from "@components/ChatDrawer";
-import AMapComponent from "@components/AMap";
+import React, { useState } from 'react';
+import { BrowserDrawer } from '@components/BrowserDrawer';
+import { ChatDrawer } from '@components/ChatDrawer';
+import AMapComponent from '@components/AMap';
 
 // 主应用组件
 const App: React.FC = () => {
     const [isChatOpen, setIsChatOpen] = useState<boolean>(true); // Electron 环境默认打开，Web 环境默认关闭
+    const [isBrowserOpen, setIsBrowserOpen] = useState<boolean>(false); // 浏览器抽屉默认关闭
 
     const toggleChat = () => setIsChatOpen(!isChatOpen);
+    const toggleBrowser = () => setIsBrowserOpen(!isBrowserOpen);
 
     // Electron 环境显示完整的地图界面
     return (
@@ -17,13 +19,10 @@ const App: React.FC = () => {
                 <AMapComponent />
             </div>
 
-            {/* BrowserView 抽屉 */}
-            {/* <BrowserViewDrawer
-                isOpen={isWebViewOpen}
-                onToggle={() => setIsWebViewOpen(!isWebViewOpen)}
-            /> */}
+            {/* 浏览器抽屉 - 左侧 */}
+            <BrowserDrawer isOpen={isBrowserOpen} onToggle={toggleBrowser} />
 
-            {/* 对话抽屉 */}
+            {/* 对话抽屉 - 右侧 */}
             <ChatDrawer isOpen={isChatOpen} onToggle={toggleChat} />
         </div>
     );

@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron';
-import { ElectronAPI } from '@shared/types/ipc';
+import { ElectronAPI, BrowserViewBounds, BrowserPageInfo, BrowserLoadError } from '@shared/types/ipc';
 import { McpInitializedEvent } from '@shared/types/mcp';
 import { IPC_CHANNELS } from '@shared/constants/config';
 
@@ -31,7 +31,31 @@ const electronAPI: ElectronAPI = {
         amapKey: process.env.AMAP_WEB_API || 'YOUR_AMAP_KEY_HERE',
     }),
 
-    // BrowserView 控制
+    // 新的BrowserView控制方法
+    browserViewCreate: () => ipcRenderer.invoke('browser-view-create'),
+    browserViewShow: (bounds: BrowserViewBounds) => ipcRenderer.invoke('browser-view-show', bounds),
+    browserViewHide: () => ipcRenderer.invoke('browser-view-hide'),
+    browserViewUpdateBounds: (bounds: BrowserViewBounds) => ipcRenderer.invoke('browser-view-update-bounds', bounds),
+    browserViewNavigate: (url: string) => ipcRenderer.invoke('browser-view-navigate', url),
+    browserViewGoBack: () => ipcRenderer.invoke('browser-view-go-back'),
+    browserViewGoForward: () => ipcRenderer.invoke('browser-view-go-forward'),
+    browserViewReload: () => ipcRenderer.invoke('browser-view-reload'),
+    browserViewStop: () => ipcRenderer.invoke('browser-view-stop'),
+    browserViewGetInfo: () => ipcRenderer.invoke('browser-view-get-info'),
+
+    // BrowserView事件监听
+    onBrowserPageInfoUpdated: (callback: (info: BrowserPageInfo) => void) =>
+        ipcRenderer.on('browser-page-info-updated', (_, info) => callback(info)),
+    onBrowserLoadingStarted: (callback: () => void) =>
+        ipcRenderer.on('browser-loading-started', () => callback()),
+    onBrowserLoadingFinished: (callback: () => void) =>
+        ipcRenderer.on('browser-loading-finished', () => callback()),
+    onBrowserLoadFailed: (callback: (error: BrowserLoadError) => void) =>
+        ipcRenderer.on('browser-load-failed', (_, error) => callback(error)),
+    onBrowserNavigated: (callback: (data: { url: string }) => void) =>
+        ipcRenderer.on('browser-navigated', (_, data) => callback(data)),
+
+    // 原有的BrowserView控制（保持兼容）
     toggleBrowserView: (isOpen: boolean) =>
         ipcRenderer.invoke(IPC_CHANNELS.TOGGLE_BROWSER_VIEW, isOpen),
     onBrowserViewLoading: (callback: (isLoading: boolean) => void) =>

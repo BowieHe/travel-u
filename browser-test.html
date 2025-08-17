@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BrowserView 测试页面</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 40px 20px;
+            line-height: 1.6;
+            color: #333;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+
+        .feature-card {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        .feature-title {
+            font-size: 1.2em;
+            font-weight: 600;
+            color: #2563eb;
+            margin-bottom: 10px;
+        }
+
+        .links {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .link-button {
+            background: #2563eb;
+            color: white;
+            text-decoration: none;
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-size: 0.9em;
+            transition: background-color 0.2s;
+        }
+
+        .link-button:hover {
+            background: #1d4ed8;
+        }
+
+        .travel-sites {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .travel-sites .feature-title {
+            color: white;
+        }
+
+        .travel-sites .link-button {
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+
+        .travel-sites .link-button:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        .search-demo {
+            background: #e7f3ff;
+            border-color: #b3d9ff;
+        }
+
+        .tech-demo {
+            background: #f0f9ff;
+            border-color: #bae6fd;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="header">
+        <h1>🌐 BrowserView 测试页面</h1>
+        <p>欢迎使用 Travel-U 内置浏览器！这个页面用于测试 BrowserView 功能。</p>
+    </div>
+
+    <div class="feature-card travel-sites">
+        <div class="feature-title">🧳 旅游网站测试</div>
+        <p>测试各大旅游网站的兼容性，验证 X-Frame-Options 问题是否已解决。</p>
+        <div class="links">
+            <a href="https://www.ctrip.com/" class="link-button">携程网</a>
+            <a href="https://www.xiaohongshu.com/explore" class="link-button">小红书</a>
+            <a href="https://www.mafengwo.cn/" class="link-button">马蜂窝</a>
+            <a href="https://www.qunar.com/" class="link-button">去哪儿</a>
+            <a href="https://www.tuniu.com/" class="link-button">途牛</a>
+            <a href="https://www.fliggy.com/" class="link-button">飞猪</a>
+        </div>
+    </div>
+
+    <div class="feature-card search-demo">
+        <div class="feature-title">🔍 搜索引擎测试</div>
+        <p>测试主流搜索引擎的显示效果。</p>
+        <div class="links">
+            <a href="https://www.bing.com/" class="link-button">Bing</a>
+            <a href="https://www.baidu.com/" class="link-button">百度</a>
+            <a href="https://www.sogou.com/" class="link-button">搜狗</a>
+            <a href="https://duckduckgo.com/" class="link-button">DuckDuckGo</a>
+        </div>
+    </div>
+
+    <div class="feature-card tech-demo">
+        <div class="feature-title">💻 技术网站测试</div>
+        <p>测试技术相关网站的兼容性。</p>
+        <div class="links">
+            <a href="https://github.com/" class="link-button">GitHub</a>
+            <a href="https://stackoverflow.com/" class="link-button">Stack Overflow</a>
+            <a href="https://developer.mozilla.org/" class="link-button">MDN</a>
+            <a href="https://www.npmjs.com/" class="link-button">NPM</a>
+        </div>
+    </div>
+
+    <div class="feature-card">
+        <div class="feature-title">📋 测试说明</div>
+        <ul>
+            <li><strong>导航测试</strong>：使用浏览器的前进、后退、刷新按钮</li>
+            <li><strong>地址栏测试</strong>：在地址栏输入网址或搜索关键词</li>
+            <li><strong>快捷导航</strong>：点击顶部的快捷按钮</li>
+            <li><strong>窗口调整</strong>：调整应用窗口大小，观察 BrowserView 是否正确调整</li>
+            <li><strong>抽屉开关</strong>：测试左侧抽屉的开启和关闭功能</li>
+        </ul>
+    </div>
+
+    <div class="feature-card">
+        <div class="feature-title">✅ 功能验证清单</div>
+        <ul>
+            <li>✓ 能否正常加载携程、小红书等之前无法加载的网站</li>
+            <li>✓ 地址栏是否能正确显示当前 URL</li>
+            <li>✓ 页面标题是否能正确更新</li>
+            <li>✓ 前进/后退按钮状态是否正确</li>
+            <li>✓ 加载状态指示器是否工作正常</li>
+            <li>✓ 错误页面处理是否优雅</li>
+            <li>✓ BrowserView 边界计算是否准确</li>
+        </ul>
+    </div>
+
+    <footer
+        style="text-align: center; margin-top: 40px; padding-top: 20px; border-top: 1px solid #dee2e6; color: #6c757d;">
+        <p>Travel-U BrowserView Integration Test • v1.0</p>
+    </footer>
+
+    <script>
+        // 添加页面加载完成的提示
+        document.addEventListener('DOMContentLoaded', function () {
+            console.log('BrowserView 测试页面加载完成');
+
+            // 监听链接点击，提供额外的日志信息
+            document.querySelectorAll('a[href]').forEach(link => {
+                link.addEventListener('click', function (e) {
+                    console.log('导航到:', this.href);
+                });
+            });
+        });
+    </script>
+</body>
+
+</html>
